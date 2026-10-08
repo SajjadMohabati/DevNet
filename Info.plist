@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.sajjadmohabati.devnet</string>
+<key>CFBundleName</key><string>DevNet</string>
+<key>CFBundleDisplayName</key><string>DevNet</string>
+<key>CFBundleExecutable</key><string>DevNet</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>1.0.0</string>
+<key>CFBundleVersion</key><string>1</string>
+<key>LSMinimumSystemVersion</key><string>26.0</string>
+<key>LSUIElement</key><true/>
+<key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+<key>NSHumanReadableCopyright</key><string>Created by Sajjad Mohabati · github.com/SajjadMohabati · MIT License</string>
+<key>NSAppleEventsUsageDescription</key><string>Needed to run route commands with administrator privileges.</string>
+</dict></plist>

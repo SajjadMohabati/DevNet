@@ -1,0 +1,36 @@
+#!/bin/sh
+# DevNet DNS helper (installed root-owned to /usr/local/libexec/devnet-dns).
+# Overrides the live DNS servers of every active network service — including VPNs, whose DNS
+# otherwise wins over Wi-Fi — and restores the originals.
+# Usage: devnet-dns set <ipv4>... | devnet-dns reset
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+ipv4='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+
+keys() { printf 'list %s\n' "$1" | scutil | awk '/State:/{print $NF}'; }
+exists() { printf 'show %s\n' "$1" | scutil | grep -q '<dictionary>'; }
+
+case "$1" in
+set)
+    shift
+    [ $# -ge 1 ] || exit 2
+    for ip in "$@"; do echo "$ip" | grep -Eq "$ipv4" || exit 2; done
+    for k in $(keys 'State:/Network/Service/[^/]+/DNS'); do
+        svc=$(echo "$k" | cut -d/ -f4)
+        b="State:/Network/DevNet/Backup/$svc"
+        exists "$b" || printf 'get %s\nset %s\n' "$k" "$b" | scutil
+        printf 'get %s\nd.add ServerAddresses * %s\nset %s\n' "$k" "$*" "$k" | scutil
+    done
+    ;;
+reset)
+    for b in $(keys 'State:/Network/DevNet/Backup/.*'); do
+        svc=$(echo "$b" | cut -d/ -f5)
+        k="State:/Network/Service/$svc/DNS"
+        # Only restore services that still exist (a disconnected VPN must not come back as a ghost resolver).
+        exists "$k" && printf 'get %s\nset %s\n' "$b" "$k" | scutil
+        printf 'remove %s\n' "$b" | scutil
+    done
+    ;;
+*) exit 2 ;;
+esac
+dscacheutil -flushcache
+killall -HUP mDNSResponder

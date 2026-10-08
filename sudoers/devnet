@@ -1,0 +1,4 @@
+# DevNet: lets USERNAME change VPN routes and DNS without a password.
+# Installed by install.sh (or DevNet › Enable Passwordless Mode), which fills in USERNAME.
+# Remove:  sudo rm /etc/sudoers.d/devnet
+USERNAME ALL=(root) NOPASSWD: /sbin/route -n add -net *, /sbin/route -n delete -net *, /sbin/route -n add -host *, /sbin/route -n delete -host *, /usr/sbin/networksetup -setdnsservers *, /usr/bin/dscacheutil -flushcache, /usr/bin/killall -HUP mDNSResponder, /usr/local/libexec/devnet-dns *
