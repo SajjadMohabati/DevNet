@@ -65,7 +65,7 @@ outside every VPN — and keeps them correct as your networks and VPNs come and 
 
 ### ✨ Feels like part of macOS
 - Native **SwiftUI**, Control Center–style panel with **Liquid Glass**, light & dark mode.
-- Global hotkey **⌃⇧I** opens the panel from anywhere, even when the menu bar icon is hidden behind the notch.
+- Global hotkey (**⌃⇧I** by default, change it in the window sidebar) opens the panel from anywhere, even when the menu bar icon is hidden behind the notch.
 - **Passwordless mode:** one prompt installs a sudoers rule limited to exactly `route add/delete`, DNS settings and cache
   flush. Nothing else gets root.
 - ~2 MB universal binary, no Electron, no background daemons, no telemetry, no account. Launch at login.

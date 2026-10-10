@@ -232,6 +232,12 @@ struct SidebarFooter: View {
                 } label: { Label("Enable Passwordless Mode…", systemImage: "key.fill") }
                 .help("Installs a sudoers rule limited to route and DNS changes, so DevNet never asks for your password")
             }
+            HStack {
+                Text("Shortcut")
+                Spacer()
+                ShortcutRecorder()
+            }
+            .help("Opens the menu bar panel from anywhere")
             Toggle("Launch at Login", isOn: $launchAtLogin)
                 .toggleStyle(.checkbox)
                 .onChange(of: launchAtLogin) { _, on in
@@ -435,8 +441,6 @@ struct MenuPanel: View {
             Divider()
             HStack {
                 Button { MainWindowController.shared.show() } label: { Label("Open DevNet", systemImage: "macwindow") }
-                Spacer()
-                Text("⌃⇧I").foregroundStyle(.tertiary)
                 Spacer()
                 Button { NSApp.terminate(nil) } label: { Label("Quit", systemImage: "power") }
             }

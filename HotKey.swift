@@ -2,24 +2,142 @@ import AppKit
 import Carbon.HIToolbox
 import SwiftUI
 
-/// System-wide shortcut via Carbon's RegisterEventHotKey (works without Accessibility permission).
-enum HotKey {
-    private static var handler: (() -> Void)?
-    private static var ref: EventHotKeyRef?
+struct Shortcut: Equatable {
+    var keyCode: UInt32
+    /// Carbon modifier flags (`cmdKey`, `shiftKey`, …).
+    var modifiers: UInt32
 
-    /// Registers ⌃⇧I. Returns false if it couldn't be registered (e.g. another app owns it).
-    @discardableResult
-    static func register(_ action: @escaping () -> Void) -> Bool {
-        handler = action
-        guard ref == nil else { return true }
+    /// Builds a shortcut from a key press. Requires ⌘, ⌥ or ⌃ so plain typing is never hijacked.
+    init?(event: NSEvent) {
+        let flags = event.modifierFlags
+        var modifiers: UInt32 = 0
+        if flags.contains(.command) { modifiers |= UInt32(cmdKey) }
+        if flags.contains(.option) { modifiers |= UInt32(optionKey) }
+        if flags.contains(.control) { modifiers |= UInt32(controlKey) }
+        guard modifiers != 0 else { return nil }
+        if flags.contains(.shift) { modifiers |= UInt32(shiftKey) }
+        self.init(keyCode: UInt32(event.keyCode), modifiers: modifiers)
+    }
+
+    init(keyCode: UInt32, modifiers: UInt32) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+    }
+
+    /// Modifier symbols in Apple's order, then the key: ["⌃", "⇧", "I"].
+    var keys: [String] {
+        let symbols = [(controlKey, "⌃"), (optionKey, "⌥"), (shiftKey, "⇧"), (cmdKey, "⌘")]
+        return symbols.filter { modifiers & UInt32($0.0) != 0 }.map(\.1) + [Self.name(of: Int(keyCode))]
+    }
+
+    private static func name(of code: Int) -> String {
+        // ANSI key codes 0x00–0x2F in order.
+        let ansi = Array("ASDFHGZXCV§BQWERYT123465=97-80]OU[IP↩LJ'K;\\,/NM.")
+        if code < ansi.count { return String(ansi[code]) }
+        let special = [
+            kVK_Tab: "⇥", kVK_Space: "Space", kVK_ANSI_Grave: "`", kVK_Delete: "⌫",
+            kVK_LeftArrow: "←", kVK_RightArrow: "→", kVK_DownArrow: "↓", kVK_UpArrow: "↑",
+            kVK_F1: "F1", kVK_F2: "F2", kVK_F3: "F3", kVK_F4: "F4", kVK_F5: "F5", kVK_F6: "F6",
+            kVK_F7: "F7", kVK_F8: "F8", kVK_F9: "F9", kVK_F10: "F10", kVK_F11: "F11", kVK_F12: "F12",
+        ]
+        return special[code] ?? "Key \(code)"
+    }
+
+    /// The saved shortcut; ⌃⇧I until the user records another.
+    static var saved: Shortcut {
+        get {
+            let d = UserDefaults.standard
+            guard d.object(forKey: "shortcutKeyCode") != nil else { return Shortcut(keyCode: UInt32(kVK_ANSI_I), modifiers: UInt32(controlKey | shiftKey)) }
+            return Shortcut(keyCode: UInt32(d.integer(forKey: "shortcutKeyCode")), modifiers: UInt32(d.integer(forKey: "shortcutModifiers")))
+        }
+        set {
+            UserDefaults.standard.set(Int(newValue.keyCode), forKey: "shortcutKeyCode")
+            UserDefaults.standard.set(Int(newValue.modifiers), forKey: "shortcutModifiers")
+        }
+    }
+}
+
+/// A single system-wide hotkey registered through Carbon (works without Accessibility permission).
+final class HotKey {
+    static let shared = HotKey()
+
+    private var handler: EventHandlerRef?
+    private var ref: EventHotKeyRef?
+    private var action: () -> Void = {}
+
+    func install(_ action: @escaping () -> Void) {
+        self.action = action
+        guard handler == nil else { return }
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(GetEventDispatcherTarget(), { _, _, _ in
-            DispatchQueue.main.async { HotKey.handler?() }
+            DispatchQueue.main.async { HotKey.shared.action() }
             return noErr
-        }, 1, &spec, nil, nil)
-        let id = EventHotKeyID(signature: OSType(0x44564E54), id: 1)   // "DVNT"
-        return RegisterEventHotKey(UInt32(kVK_ANSI_I), UInt32(controlKey | shiftKey), id,
-                                   GetEventDispatcherTarget(), 0, &ref) == noErr
+        }, 1, &spec, nil, &handler)
+    }
+
+    func register(_ shortcut: Shortcut) {
+        unregister()
+        let id = EventHotKeyID(signature: 0x4456_4E54, id: 1)   // "DVNT"
+        RegisterEventHotKey(shortcut.keyCode, shortcut.modifiers, id, GetEventDispatcherTarget(), 0, &ref)
+    }
+
+    func unregister() {
+        if let ref { UnregisterEventHotKey(ref) }
+        ref = nil
+    }
+}
+
+/// Shows the shortcut as key caps; click to record a new one.
+struct ShortcutRecorder: View {
+    @State private var shortcut = Shortcut.saved
+    @State private var monitor: Any?
+
+    private var recording: Bool { monitor != nil }
+
+    var body: some View {
+        Button {
+            recording ? stop() : start()
+        } label: {
+            HStack(spacing: 3) {
+                if recording {
+                    Text("Press keys…").font(.system(size: 11, weight: .medium)).foregroundStyle(.tint).padding(.horizontal, 6)
+                } else {
+                    ForEach(Array(shortcut.keys.enumerated()), id: \.offset) { _, key in
+                        Text(key).font(.system(size: 11, weight: .medium))
+                            .frame(minWidth: 18, minHeight: 18).padding(.horizontal, 2)
+                            .background(Color.primary.opacity(0.1), in: .rect(cornerRadius: 5))
+                    }
+                }
+            }
+            .frame(minHeight: 22)
+            .padding(.horizontal, 3)
+            .overlay { RoundedRectangle(cornerRadius: 7).strokeBorder(recording ? Color.accentColor : .clear, lineWidth: 1.5) }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .help("Click, then press the new shortcut. Esc cancels.")
+        .onDisappear(perform: stop)
+    }
+
+    private func start() {
+        // Free the current shortcut so pressing it again can be recorded.
+        HotKey.shared.unregister()
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == UInt16(kVK_Escape) {
+                stop()
+            } else if let recorded = Shortcut(event: event) {
+                shortcut = recorded
+                Shortcut.saved = recorded
+                stop()
+            }
+            return nil
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        HotKey.shared.register(shortcut)
     }
 }
 
@@ -89,6 +207,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             // Standard menu material (like system menus); the SwiftUI content sizes itself.
             let host = NSHostingView(rootView: AnyView(MenuPanel().sharedStores()))
             host.sizingOptions = [.intrinsicContentSize]
+            host.safeAreaRegions = []   // otherwise the content is pushed down by the menu bar's safe area
             host.translatesAutoresizingMaskIntoConstraints = false
             let fx = NSVisualEffectView()
             fx.material = .menu
@@ -170,8 +289,8 @@ final class PanelController: NSObject, NSWindowDelegate {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let ok = HotKey.register { PanelController.shared.toggle() }
-        NSLog("DevNet: hotkey ⌃⇧I registered=%d", ok ? 1 : 0)
+        HotKey.shared.install { PanelController.shared.toggle() }
+        HotKey.shared.register(Shortcut.saved)
         if CommandLine.arguments.contains("--window") { MainWindowController.shared.show() }
         if CommandLine.arguments.contains("--panel") { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { PanelController.shared.toggle() } }
     }
