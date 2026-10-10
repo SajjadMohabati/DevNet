@@ -200,29 +200,37 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func toggle() { panel?.isVisible == true ? hide() : show() }
 
-    private var host: NSHostingView<AnyView>?
+    private var height: CGFloat = 420
+    private let width: CGFloat = 330    // MenuPanel's fixed width
 
     func show() {
         if panel == nil {
-            // Standard menu material (like system menus); the SwiftUI content sizes itself.
-            let host = NSHostingView(rootView: AnyView(MenuPanel().sharedStores()))
-            host.sizingOptions = [.intrinsicContentSize]
-            host.safeAreaRegions = []   // otherwise the content is pushed down by the menu bar's safe area
-            host.translatesAutoresizingMaskIntoConstraints = false
-            let fx = NSVisualEffectView()
+            // The content reports its own height; the panel follows it with its top edge fixed.
+            let root = MenuPanel().sharedStores()
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { [weak self] h in self?.setHeight(h) }
+                .frame(maxHeight: .infinity, alignment: .top)
+            let host = NSHostingView(rootView: root)
+            host.sizingOptions = []
+            host.safeAreaRegions = []
+            let fx = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
             fx.material = .menu
             fx.state = .active
             fx.blendingMode = .behindWindow
-            fx.wantsLayer = true
-            fx.layer?.cornerRadius = 12
-            fx.layer?.masksToBounds = true
+            // Rounded corners: a visual effect view is clipped with a stretchable mask image, not a layer radius.
+            let r: CGFloat = 14
+            let mask = NSImage(size: NSSize(width: r * 2 + 1, height: r * 2 + 1), flipped: false) { rect in
+                NSColor.black.setFill()
+                NSBezierPath(roundedRect: rect, xRadius: r, yRadius: r).fill()
+                return true
+            }
+            mask.capInsets = NSEdgeInsets(top: r, left: r, bottom: r, right: r)
+            mask.resizingMode = .stretch
+            fx.maskImage = mask
+            host.frame = fx.bounds
+            host.autoresizingMask = [.width, .height]
             fx.addSubview(host)
-            NSLayoutConstraint.activate([
-                host.topAnchor.constraint(equalTo: fx.topAnchor),
-                host.leadingAnchor.constraint(equalTo: fx.leadingAnchor),
-                host.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
-            ])
-            let p = KeyPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 400), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+            let p = KeyPanel(contentRect: fx.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             p.contentView = fx
             p.isFloatingPanel = true
             p.level = .statusBar
@@ -235,23 +243,16 @@ final class PanelController: NSObject, NSWindowDelegate {
             p.hasShadow = true
             p.delegate = self
             panel = p
-            self.host = host
-            // Keep the panel's top edge fixed when the content grows/shrinks (e.g. expanding DNS).
-            host.postsFrameChangedNotifications = true
-            NotificationCenter.default.addObserver(forName: NSView.frameDidChangeNotification, object: host, queue: .main) { [weak self] _ in
-                self?.fitHeight()
-            }
         }
         guard let panel, let screen = NSScreen.main else { return }
-        let size = host?.fittingSize ?? NSSize(width: 300, height: 600)
         let area = screen.visibleFrame
         // Under the status item when it's visible on this screen, otherwise at the top-right corner.
-        var x = area.maxX - size.width - 8
+        var x = area.maxX - width - 8
         if let b = statusButton(), let w = b.window, w.occlusionState.contains(.visible), w.screen == screen {
             let f = w.convertToScreen(b.convert(b.bounds, to: nil))
-            x = min(max(f.midX - size.width / 2, area.minX + 8), area.maxX - size.width - 8)
+            x = min(max(f.midX - width / 2, area.minX + 8), area.maxX - width - 8)
         }
-        panel.setFrame(NSRect(x: x, y: area.maxY - size.height - 6, width: size.width, height: size.height), display: true)
+        panel.setFrame(NSRect(x: x, y: area.maxY - height - 6, width: width, height: height), display: true)
         // A non-activating panel takes the keyboard without switching away from the current app.
         panel.makeKeyAndOrderFront(nil)
         escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
@@ -260,10 +261,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    private func fitHeight() {
-        guard let panel, let host, panel.isVisible else { return }
-        let h = host.fittingSize.height
-        guard abs(h - panel.frame.height) > 0.5 else { return }
+    private func setHeight(_ h: CGFloat) {
+        guard h > 0, abs(h - height) > 0.5 else { return }
+        height = h
+        guard let panel else { return }
         var f = panel.frame
         f.origin.y += f.height - h
         f.size.height = h
