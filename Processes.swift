@@ -53,7 +53,11 @@ final class ProcStore: ObservableObject {
 
     static let docker = ["/usr/local/bin/docker", "/opt/homebrew/bin/docker"].first { FileManager.default.isExecutableFile(atPath: $0) }
 
+    private var refreshing = false
+
     func refresh() {
+        guard !refreshing else { return }
+        refreshing = true
         let showAll = showAll
         background {
             let list = Self.scan(showAll: showAll)
@@ -66,6 +70,7 @@ final class ProcStore: ObservableObject {
                 }
                 let alive = Set(list.map { String($0.id) } + cs.map(\.id))
                 self.stopping.formIntersection(alive)
+                self.refreshing = false
             }
         }
     }

@@ -52,10 +52,15 @@ outside every VPN — and keeps them correct as your networks and VPNs come and 
 - Copy any of them with one click.
 
 ### 🧭 DNS switching that actually takes effect under a VPN
-- Presets for **Shecan, Electro, Begzar, 403, Radar Game, Google, Cloudflare** — add your own.
+- Presets for **Shecan (free & Pro), Electro, Begzar, 403, Radar Game, Google, Cloudflare** — add your own.
 - Most DNS changers set Wi-Fi DNS and silently lose to the DNS your VPN pushes. DevNet's small root helper overrides it
   **live on every active service, VPNs included**, and restores the originals when you go back to Automatic.
 - Shows the resolver macOS is *really* using, latency test for each preset, one-click cache flush.
+
+### ⚡️ Speed test & live latency
+- One-click **Cloudflare speed test** (download, upload, ping) with a live graph and history — it measures the path
+  your traffic really takes, through the VPN or direct.
+- Live throughput and latency to your own ping targets while DevNet is open; nothing runs while it's hidden.
 
 ### 🛠 Dev-server manager
 - Lists everything listening on a port, grouped by **project folder** (Node, Bun, Deno, Python, Java/Gradle, Go, Ruby,

@@ -28,7 +28,7 @@ func sh(_ path: String, _ args: [String]) -> String {
     p.arguments = args
     let pipe = Pipe()
     p.standardOutput = pipe
-    p.standardError = Pipe()
+    p.standardError = FileHandle.nullDevice   // an unread stderr pipe can fill up and block the command forever
     guard (try? p.run()) != nil else { return "" }
     let out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
     p.waitUntilExit()
@@ -105,7 +105,7 @@ enum AppInfo {
     static let author = "Sajjad Mohabati"
     static let repo = URL(string: "https://github.com/SajjadMohabati/DevNet")!
     static let profile = URL(string: "https://github.com/SajjadMohabati")!
-    static var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.0" }
+    static var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.2.0" }
 
     /// True once install.sh has put the DNS helper and sudoers rule in place.
     static var passwordless: Bool {

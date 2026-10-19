@@ -147,11 +147,13 @@ enum Shared {
     static let procs = ProcStore()
     static let dns = DNSStore()
     static let net = NetStore()
+    static let speed = SpeedStore()
 }
 
 extension View {
     func sharedStores() -> some View {
-        environmentObject(Shared.routes).environmentObject(Shared.procs).environmentObject(Shared.dns).environmentObject(Shared.net)
+        environmentObject(Shared.routes).environmentObject(Shared.procs).environmentObject(Shared.dns)
+            .environmentObject(Shared.net).environmentObject(Shared.speed)
     }
 }
 
@@ -199,6 +201,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     private var escMonitor: Any?
 
     func toggle() { panel?.isVisible == true ? hide() : show() }
+    var isShown: Bool { panel?.isVisible == true }
 
     private var height: CGFloat = 420
     private let width: CGFloat = 330    // MenuPanel's fixed width
@@ -255,6 +258,14 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.setFrame(NSRect(x: x, y: area.maxY - height - 6, width: width, height: height), display: true)
         // A non-activating panel takes the keyboard without switching away from the current app.
         panel.makeKeyAndOrderFront(nil)
+        // The panel's SwiftUI content is created once and kept alive, so onAppear never fires
+        // again on later opens — refresh the stores here so the IPs and status are always current.
+        Shared.routes.refresh()
+        Shared.dns.refresh()
+        Shared.procs.refresh()
+        Shared.net.refresh(gateway: Shared.routes.currentGateway)
+        Shared.speed.poke()
+        if let m = escMonitor { NSEvent.removeMonitor(m) }
         escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             if e.keyCode == UInt16(kVK_Escape) { self?.hide(); return nil }
             return e

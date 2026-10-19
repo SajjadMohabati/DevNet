@@ -10,7 +10,8 @@ struct DNSPreset: Codable, Identifiable, Equatable {
 }
 
 let defaultPresets: [DNSPreset] = [
-    DNSPreset(name: "Shecan", servers: ["178.22.122.100", "185.51.231.231"]),
+    DNSPreset(name: "Shecan", servers: ["178.22.122.100", "185.51.200.2"]),
+    DNSPreset(name: "Shecan Pro", servers: ["178.22.122.101", "185.51.200.1"]),
     DNSPreset(name: "Electro", servers: ["78.157.42.100", "78.157.42.101"]),
     DNSPreset(name: "Begzar", servers: ["185.55.226.26", "185.55.225.25"]),
     DNSPreset(name: "403", servers: ["10.202.10.202", "10.202.10.102"]),
@@ -38,6 +39,8 @@ final class DNSStore: ObservableObject {
     init() {
         if let saved = try? JSONDecoder().decode([DNSPreset].self, from: Data(contentsOf: Self.file)) {
             presets = saved
+            Self.migrate(&presets)
+            save()
         } else {
             presets = defaultPresets
             // Keep whatever DNS was configured before the first run as a preset.
@@ -48,6 +51,17 @@ final class DNSStore: ObservableObject {
             save()
         }
         refresh()
+    }
+
+    /// Brings saved presets up to date: Shecan's free servers moved, and Shecan Pro (paid) was added.
+    private static func migrate(_ p: inout [DNSPreset]) {
+        if let i = p.firstIndex(where: { $0.name == "Shecan" && $0.servers == ["178.22.122.100", "185.51.231.231"] }) {
+            p[i].servers = ["178.22.122.100", "185.51.200.2"]
+        }
+        if !p.contains(where: { $0.servers.first == "178.22.122.101" }) {
+            let pro = DNSPreset(name: "Shecan Pro", servers: ["178.22.122.101", "185.51.200.1"])
+            p.insert(pro, at: (p.firstIndex { $0.name == "Shecan" }).map { $0 + 1 } ?? 0)
+        }
     }
 
     static func read(_ service: String) -> [String] {

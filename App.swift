@@ -48,7 +48,12 @@ final class NetStore: ObservableObject {
         return list.sorted { ($0.iface == defaultIface ? 0 : 1) < ($1.iface == defaultIface ? 0 : 1) }
     }
 
+    private var refreshing = false
+
+    /// Coalesced: a refresh requested while one is running is dropped (it would report the same thing).
     func refresh(gateway: String) {
+        guard !refreshing else { return }
+        refreshing = true
         background {
             let iface = keyValues(sh("/sbin/route", "-n", "get", "default"))["interface"] ?? ""
             var phys = "", ip = ""
@@ -57,12 +62,13 @@ final class NetStore: ObservableObject {
                 if !a.isEmpty { phys = i; ip = a; break }
             }
             let up = sh("/sbin/ping", "-c", "1", "-t", "1", "-q", gateway).contains(" 0.0% packet loss")
-            var tunnels = Self.scanTunnels(defaultIface: iface)
+            let tunnels = Self.scanTunnels(defaultIface: iface)
             onMain {
                 self.defaultIface = iface; self.localIP = ip; self.physicalIface = phys; self.gatewayUp = up
-                // Keep already-known public IPs while new ones load.
-                for i in tunnels.indices { tunnels[i].publicIP = self.tunnels.first { $0.iface == tunnels[i].iface }?.publicIP ?? "" }
-                self.tunnels = tunnels
+                // Keep already-known public IPs while new ones load (a main-thread copy; the list above stays read-only).
+                var shown = tunnels
+                for i in shown.indices { shown[i].publicIP = self.tunnels.first { $0.iface == shown[i].iface }?.publicIP ?? "" }
+                self.tunnels = shown
             }
 
             // Public IPs: one request per path, in parallel. ipify is abroad; ipapi.ir is in Iran (so it goes through the routes).
@@ -84,6 +90,7 @@ final class NetStore: ObservableObject {
                 self.routedIP = results["routed"] ?? ""
                 self.directIP = results["direct"] ?? ""
                 for i in self.tunnels.indices { self.tunnels[i].publicIP = results[self.tunnels[i].iface] ?? "" }
+                self.refreshing = false
             }
         }
     }
@@ -133,11 +140,11 @@ struct IPLine: View {
 // MARK: - Main window
 
 enum Pane: String, CaseIterable, Identifiable {
-    case routes, projects, dns
+    case routes, projects, dns, speed
     var id: Self { self }
-    var title: String { switch self { case .routes: "Routes"; case .projects: "Projects"; case .dns: "DNS" } }
-    var symbol: String { switch self { case .routes: "arrow.triangle.branch"; case .projects: "server.rack"; case .dns: "globe" } }
-    var color: Color { switch self { case .routes: .blue; case .projects: .green; case .dns: .indigo } }
+    var title: String { switch self { case .routes: "Routes"; case .projects: "Projects"; case .dns: "DNS"; case .speed: "Speed" } }
+    var symbol: String { switch self { case .routes: "arrow.triangle.branch"; case .projects: "server.rack"; case .dns: "globe"; case .speed: "speedometer" } }
+    var color: Color { switch self { case .routes: .blue; case .projects: .green; case .dns: .indigo; case .speed: .orange } }
 }
 
 struct MainWindow: View {
@@ -184,6 +191,7 @@ struct MainWindow: View {
                 case .routes: RoutesView()
                 case .projects: ProjectsView()
                 case .dns: DNSView()
+                case .speed: SpeedView()
                 }
             }
             .disabled(routes.busy)
@@ -205,6 +213,7 @@ struct MainWindow: View {
         case .routes: routes.activeCount
         case .projects: procs.items.count + procs.containers.count
         case .dns: 0
+        case .speed: 0
         }
     }
 }
@@ -316,6 +325,7 @@ struct MenuPanel: View {
     @EnvironmentObject var procs: ProcStore
     @EnvironmentObject var dns: DNSStore
     @EnvironmentObject var net: NetStore
+    @EnvironmentObject var speed: SpeedStore
     @AppStorage("menuShowRoutes") private var showRoutes = false
 
     var dnsName: String {
@@ -324,7 +334,7 @@ struct MenuPanel: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             // Header
             HStack(spacing: 6) {
                 Text("DevNet").font(.system(size: 13, weight: .bold))
@@ -351,8 +361,10 @@ struct MenuPanel: View {
                 }
             }
             .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.vertical, 4)
             .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            SpeedCompact()
 
             if let e = routes.error ?? dns.error {
                 Label(e, systemImage: "exclamationmark.triangle.fill").font(.system(size: 11)).foregroundStyle(.red).lineLimit(2)
@@ -411,7 +423,7 @@ struct MenuPanel: View {
                 }
 
                 // Projects
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 3) {
                     HStack {
                         Text("Projects").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                         Spacer()
@@ -455,12 +467,13 @@ struct MenuPanel: View {
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity)
         }
-        .padding(12)
+        .padding(10)
         .frame(width: 330)
         .onAppear {
             routes.refresh()
             dns.refresh()
             procs.refresh()
+            speed.poke()
             net.refresh(gateway: routes.currentGateway)
         }
     }
@@ -505,7 +518,7 @@ struct DevNetApp: App {
 
     init() {
         // Create the stores before SwiftUI observes them (their init publishes changes).
-        _ = (Shared.routes, Shared.procs, Shared.dns, Shared.net)
+        _ = (Shared.routes, Shared.procs, Shared.dns, Shared.net, Shared.speed)
     }
 
     var body: some Scene {
