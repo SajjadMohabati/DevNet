@@ -161,14 +161,19 @@ extension View {
 final class MainWindowController: NSObject, NSWindowDelegate {
     static let shared = MainWindowController()
     private var window: NSWindow?
+    private var host: NSHostingController<AnyView>?
 
     var isFrontmost: Bool { window?.isVisible == true && window?.isKeyWindow == true && NSApp.isActive }
 
     func toggle() { isFrontmost ? window?.performClose(nil) : show() }
 
+    private static var content: AnyView {
+        AnyView(MainWindow().sharedStores().frame(minWidth: 680, minHeight: 440))
+    }
+
     func show() {
         if window == nil {
-            let host = NSHostingController(rootView: MainWindow().sharedStores().frame(minWidth: 680, minHeight: 440))
+            let host = NSHostingController(rootView: Self.content)
             host.sceneBridgingOptions = [.toolbars, .title]
             let w = NSWindow(contentViewController: host)
             w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
@@ -179,13 +184,19 @@ final class MainWindowController: NSObject, NSWindowDelegate {
             if !w.setFrameUsingName("DevNetMain") { w.center() }
             w.setFrameAutosaveName("DevNetMain")
             window = w
+            self.host = host
         }
         NSApp.setActivationPolicy(.regular)     // show in Dock and ⌘-Tab while the window is open
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate()
     }
 
-    func windowWillClose(_ notification: Notification) { NSApp.setActivationPolicy(.accessory) }
+    func windowWillClose(_ notification: Notification) {
+        // The window and its SwiftUI tree are kept for the next open on purpose: on macOS 26, tearing down
+        // a NavigationSplitView/Form tree leaks 5–15 MB every time (reproduced with a bare SwiftUI window),
+        // while a kept tree stays flat. Background monitors pause on their own while it's hidden.
+        NSApp.setActivationPolicy(.accessory)
+    }
 }
 
 /// The menu bar panel's content in our own floating window, so the shortcut works even when the
@@ -204,16 +215,20 @@ final class PanelController: NSObject, NSWindowDelegate {
     var isShown: Bool { panel?.isVisible == true }
 
     private var height: CGFloat = 420
+    private var host: NSHostingView<AnyView>?
+
+    private var panelContent: AnyView {
+        AnyView(MenuPanel().sharedStores()
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { [weak self] h in self?.setHeight(h) }
+            .frame(maxHeight: .infinity, alignment: .top))
+    }
     private let width: CGFloat = 330    // MenuPanel's fixed width
 
     func show() {
         if panel == nil {
             // The content reports its own height; the panel follows it with its top edge fixed.
-            let root = MenuPanel().sharedStores()
-                .fixedSize(horizontal: false, vertical: true)
-                .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { [weak self] h in self?.setHeight(h) }
-                .frame(maxHeight: .infinity, alignment: .top)
-            let host = NSHostingView(rootView: root)
+            let host = NSHostingView(rootView: panelContent)
             host.sizingOptions = []
             host.safeAreaRegions = []
             let fx = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
@@ -233,6 +248,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             host.frame = fx.bounds
             host.autoresizingMask = [.width, .height]
             fx.addSubview(host)
+            self.host = host
             let p = KeyPanel(contentRect: fx.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             p.contentView = fx
             p.isFloatingPanel = true
