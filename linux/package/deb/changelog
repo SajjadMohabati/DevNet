@@ -1,0 +1,9 @@
+devnet (1.2.0) unstable; urgency=medium
+
+  * Initial native Linux release.
+  * Split tunneling for networks, hosts, domains and country ranges.
+  * DNS presets for systemd-resolved, NetworkManager and resolv.conf.
+  * Cloudflare speed test, live latency and local dev-server manager.
+  * Tray icon, compact panel, global shortcut and scoped polkit helper.
+
+ -- Sajjad Mohabati <sajjadmohabati@users.noreply.github.com>  Thu, 22 Oct 2026 00:00:00 +0000

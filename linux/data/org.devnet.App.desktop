@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=DevNet
+GenericName=Split Tunneling & DNS
+Comment=Route networks around your VPN, switch DNS and manage local dev servers
+Exec=devnet --window
+Icon=org.devnet.App
+Terminal=false
+Categories=Network;System;
+Keywords=vpn;route;routing;dns;split;tunnel;development;
+StartupNotify=true
+Actions=Panel;
+
+[Desktop Action Panel]
+Name=Open DevNet Panel
+Exec=devnet --panel

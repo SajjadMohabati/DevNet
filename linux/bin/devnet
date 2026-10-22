@@ -1,0 +1,7 @@
+#!/bin/sh
+# Installed launcher. The application code is kept out of dist-packages so a
+# system package and a source checkout can never shadow each other.
+set -eu
+PYTHONPATH="/usr/lib/devnet${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH
+exec /usr/bin/python3 -m devnet "$@"

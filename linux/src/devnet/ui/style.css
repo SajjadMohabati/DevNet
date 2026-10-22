@@ -1,0 +1,433 @@
+/* DevNet for Linux — a quiet, native-looking layer on top of Adwaita. */
+
+.devn-window {
+  background-color: @window_bg_color;
+}
+
+.devn-sidebar {
+  background-color: @sidebar_bg_color;
+  border-right: 1px solid alpha(@window_fg_color, 0.08);
+}
+
+.devn-brand {
+  padding: 14px 10px 10px 10px;
+}
+
+.devn-brand-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.devn-brand-subtitle {
+  font-size: 10px;
+  color: alpha(@window_fg_color, 0.55);
+}
+
+.devn-nav {
+  padding: 2px 0;
+}
+
+.devn-nav button {
+  border-radius: 10px;
+  padding: 7px 9px;
+  min-height: 30px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.devn-nav button:hover {
+  background-color: alpha(@window_fg_color, 0.06);
+}
+
+.devn-nav button:checked {
+  background-color: alpha(@accent_bg_color, 0.15);
+}
+
+.devn-nav button:checked label {
+  font-weight: 700;
+}
+
+.devn-nav-title {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.devn-nav-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 99px;
+  background-color: alpha(@window_fg_color, 0.09);
+  color: alpha(@window_fg_color, 0.7);
+}
+
+.devn-nav button:checked .devn-nav-badge {
+  background-color: alpha(@accent_bg_color, 0.22);
+  color: @accent_color;
+}
+
+.devn-app-icon {
+  min-width: 26px;
+  min-height: 26px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.devn-app-icon.small {
+  min-width: 20px;
+  min-height: 20px;
+  border-radius: 6px;
+  font-size: 9px;
+}
+
+.devn-app-icon.blue { background-image: linear-gradient(180deg, #5da7ff, #1c71d8); }
+.devn-app-icon.green { background-image: linear-gradient(180deg, #6fe08a, #26a269); }
+.devn-app-icon.indigo { background-image: linear-gradient(180deg, #8b9bff, #5147cf); }
+.devn-app-icon.orange { background-image: linear-gradient(180deg, #ffbe5c, #e66100); }
+.devn-app-icon.pink { background-image: linear-gradient(180deg, #ff94c6, #c01c86); }
+.devn-app-icon.teal { background-image: linear-gradient(180deg, #6ee7d8, #008a83); }
+.devn-app-icon.red { background-image: linear-gradient(180deg, #ff8b8b, #c01c28); }
+.devn-app-icon.purple { background-image: linear-gradient(180deg, #c79bff, #813d9c); }
+.devn-app-icon.cyan { background-image: linear-gradient(180deg, #7de3f4, #007e9c); }
+.devn-app-icon.gray { background-image: linear-gradient(180deg, #b9b9b9, #77767b); }
+
+.devn-section-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: alpha(@window_fg_color, 0.48);
+  padding: 12px 10px 4px 10px;
+}
+
+.devn-sidebar-row {
+  padding: 1px 10px;
+  min-height: 24px;
+}
+
+.devn-sidebar-row label {
+  font-size: 11.5px;
+  color: alpha(@window_fg_color, 0.62);
+}
+
+.devn-sidebar-row-title {
+  color: alpha(@window_fg_color, 0.62);
+}
+
+.devn-sidebar-row-value {
+  font-size: 11.5px;
+  color: alpha(@window_fg_color, 0.82);
+}
+
+.devn-footer {
+  padding: 10px;
+  border-top: 1px solid alpha(@window_fg_color, 0.08);
+}
+
+.devn-footer-row {
+  padding: 2px 0;
+}
+
+.devn-footer label {
+  font-size: 11.5px;
+}
+
+.devn-caption {
+  font-size: 10.5px;
+  color: alpha(@window_fg_color, 0.55);
+}
+
+.devn-mono {
+  font-family: "Adwaita Mono", "JetBrains Mono", "SF Mono", monospace;
+  font-feature-settings: "tnum";
+}
+
+.devn-stat-value {
+  font-size: 21px;
+  font-weight: 700;
+  font-feature-settings: "tnum";
+}
+
+.devn-stat-title {
+  font-size: 10.5px;
+  color: alpha(@window_fg_color, 0.6);
+}
+
+.devn-stat-value.blue { color: #3584e4; }
+.devn-stat-value.orange { color: #e66100; }
+.devn-stat-value.green { color: #2ec27e; }
+.devn-stat-value.red { color: #e01b24; }
+.devn-stat-value.muted { color: alpha(@window_fg_color, 0.5); }
+
+.devn-ip-card {
+  background-color: alpha(@window_fg_color, 0.055);
+  border-radius: 12px;
+  padding: 5px 8px;
+}
+
+.devn-ip-row {
+  min-height: 22px;
+}
+
+.devn-ip-label {
+  font-size: 11.5px;
+  color: alpha(@window_fg_color, 0.62);
+}
+
+.devn-ip-value {
+  font-size: 11.5px;
+  font-feature-settings: "tnum";
+}
+
+.devn-ip-copy {
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  color: alpha(@window_fg_color, 0.5);
+}
+
+.devn-ip-copy:hover {
+  background-color: alpha(@window_fg_color, 0.09);
+}
+
+.devn-tile {
+  background-color: alpha(@window_fg_color, 0.055);
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.devn-tile.on {
+  background-color: alpha(@accent_bg_color, 0.14);
+}
+
+.devn-tile-title {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.devn-tile-subtitle {
+  font-size: 10px;
+  color: alpha(@window_fg_color, 0.6);
+}
+
+.devn-tile-icon {
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 99px;
+  color: @window_fg_color;
+  background-color: alpha(@window_fg_color, 0.09);
+}
+
+.devn-tile.on .devn-tile-icon {
+  color: @accent_fg_color;
+  background-color: @accent_bg_color;
+}
+
+.devn-panel {
+  background-color: @popover_bg_color;
+  border-radius: 16px;
+  border: 1px solid alpha(@window_fg_color, 0.12);
+}
+
+.devn-panel-body {
+  padding: 12px;
+}
+
+.devn-panel-header {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.devn-status-dot {
+  min-width: 7px;
+  min-height: 7px;
+  border-radius: 99px;
+  background-color: alpha(@window_fg_color, 0.4);
+}
+
+.devn-status-dot.on {
+  background-color: #2ec27e;
+}
+
+.devn-status-dot.off {
+  background-color: #e01b24;
+}
+
+.devn-error {
+  color: @error_color;
+  font-size: 11px;
+}
+
+.devn-warning {
+  color: @warning_color;
+  font-size: 11px;
+}
+
+.devn-success {
+  color: @success_color;
+}
+
+.devn-route-mini {
+  padding: 3px 8px;
+}
+
+.devn-route-mini label {
+  font-size: 11.5px;
+}
+
+.devn-chart {
+  background-color: alpha(@window_fg_color, 0.04);
+  border-radius: 10px;
+}
+
+.devn-card {
+  background-color: @card_bg_color;
+  border-radius: 12px;
+  padding: 14px;
+  border: 1px solid alpha(@window_fg_color, 0.07);
+}
+
+.devn-card-title {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.devn-card-subtitle {
+  font-size: 11px;
+  color: alpha(@window_fg_color, 0.55);
+}
+
+.devn-row {
+  padding: 5px 0;
+}
+
+.devn-row-title {
+  font-size: 12.5px;
+}
+
+.devn-row-subtitle {
+  font-size: 10.5px;
+  color: alpha(@window_fg_color, 0.55);
+}
+
+.devn-separator {
+  background-color: alpha(@window_fg_color, 0.08);
+  min-height: 1px;
+}
+
+.devn-link {
+  color: @accent_color;
+  font-size: 11px;
+}
+
+.devn-chart-empty {
+  color: alpha(@window_fg_color, 0.45);
+  font-size: 11.5px;
+}
+
+.devn-pill {
+  border-radius: 99px;
+  padding: 1px 8px;
+  font-size: 10px;
+  background-color: alpha(@warning_color, 0.16);
+  color: @warning_color;
+}
+
+.devn-big-button {
+  border-radius: 10px;
+  padding: 8px 18px;
+}
+
+.devn-progress {
+  min-height: 3px;
+  border-radius: 99px;
+}
+
+.devn-chip {
+  border-radius: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  background-color: alpha(@window_fg_color, 0.08);
+}
+
+.devn-keycap {
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background-color: alpha(@window_fg_color, 0.1);
+}
+
+.devn-recording {
+  color: @accent_color;
+  font-weight: 700;
+}
+
+.devn-banner {
+  padding: 8px 12px;
+  background-color: alpha(@warning_color, 0.12);
+  border-bottom: 1px solid alpha(@window_fg_color, 0.08);
+}
+
+.devn-banner image {
+  color: @warning_color;
+}
+
+.devn-mono.blue {
+  color: #3584e4;
+}
+
+.devn-mono.orange {
+  color: #e66100;
+}
+
+.devn-mono.dim-label {
+  opacity: 0.7;
+}
+
+.devn-panel-window {
+  background-color: transparent;
+}
+
+.devn-speed-compact {
+  padding: 7px 10px;
+  border-radius: 12px;
+  background-color: alpha(@window_fg_color, 0.055);
+}
+
+.devn-ping-badge {
+  min-width: 42px;
+  padding: 2px 4px;
+  border-radius: 9px;
+  background-color: alpha(@window_fg_color, 0.06);
+}
+
+.devn-ping-value {
+  font-size: 17px;
+  font-weight: 700;
+  font-feature-settings: "tnum";
+}
+
+.devn-ping-value.green { color: #2ec27e; }
+.devn-ping-value.yellow { color: #e5a50a; }
+.devn-ping-value.red { color: #e01b24; }
+
+.devn-menu-tile {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.devn-menu-tile:hover {
+  background: transparent;
+}
+
+

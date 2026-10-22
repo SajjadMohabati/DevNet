@@ -112,6 +112,21 @@ sudo ./install.sh      # optional: passwordless mode + DNS helper (same as the i
 
 Needs only the **Xcode Command Line Tools** — no Xcode project, no dependencies.
 
+## Linux
+
+A native Linux port lives in [`linux/`](linux/README.md) — GTK4 + libadwaita, the same
+**Routes**, **Projects**, **DNS** and **Speed** sections, a tray icon, a compact panel and a
+scoped polkit helper. It ships as a `.deb` and an `.rpm` and supports Debian 12+, Ubuntu 22.10+,
+Fedora 37+ and RHEL 9 with EPEL. The macOS sources and installer are unchanged.
+
+```bash
+sudo ./linux/install.sh          # install from source
+./linux/run.sh                   # or run straight from the checkout
+```
+
+See [`linux/README.md`](linux/README.md) ([فارسی](linux/README.fa.md)) for packaging,
+troubleshooting and the security model.
+
 ## Requirements
 
 macOS 26 Tahoe or later · Apple silicon or Intel

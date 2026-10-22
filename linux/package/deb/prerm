@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+# Restore the resolver before the helper is removed. On an upgrade, leave the
+# active preset alone; the new helper keeps using the same state directory.
+case "$1" in
+    remove|purge)
+        if [ -x /usr/libexec/devnet/devnet-helper ]; then
+            /usr/libexec/devnet/devnet-helper dns-reset >/dev/null 2>&1 || true
+        fi
+        ;;
+esac
+
+exit 0

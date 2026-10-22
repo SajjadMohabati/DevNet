@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.devnet.App</id>
+  <name>DevNet</name>
+  <summary>Split tunneling, DNS switching and local dev servers</summary>
+  <developer id="io.github.sajjadmohabati">
+    <name>Sajjad Mohabati</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description>
+    <p>
+      DevNet routes chosen networks, domains and country IP ranges around your VPN
+      and keeps those routes correct when Wi-Fi or the VPN changes.
+    </p>
+    <p>
+      It also switches DNS presets on every active link (including VPN links),
+      tests the path traffic really takes, and lists local dev servers and
+      containers with one-click open and stop actions.
+    </p>
+    <p>
+      The app lives in the system tray and includes a compact panel, a full native
+      GTK4 window, GNOME shortcut support and optional passwordless operation
+      through a small, scoped polkit rule.
+    </p>
+  </description>
+  <launchable type="desktop-id">org.devnet.App.desktop</launchable>
+  <url type="homepage">https://github.com/SajjadMohabati/DevNet</url>
+  <url type="bugtracker">https://github.com/SajjadMohabati/DevNet/issues</url>
+  <url type="vcs-browser">https://github.com/SajjadMohabati/DevNet</url>
+  <provides>
+    <binary>devnet</binary>
+  </provides>
+  <categories>
+    <category>Network</category>
+    <category>System</category>
+  </categories>
+  <keywords>
+    <keyword>vpn</keyword>
+    <keyword>split tunnel</keyword>
+    <keyword>route</keyword>
+    <keyword>dns</keyword>
+    <keyword>dev server</keyword>
+  </keywords>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.2.0" date="2026-10-22">
+      <description>
+        <p>Initial native Linux release with Debian and Red Hat packaging.</p>
+      </description>
+    </release>
+  </releases>
+</component>

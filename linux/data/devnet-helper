@@ -1,0 +1,851 @@
+#!/usr/bin/python3
+"""DevNet's small privileged helper.
+
+The GUI never runs ``ip`` or resolver tools as root.  It sends one validated
+JSON request to this program through ``pkexec`` and this program performs only
+the two operations DevNet needs:
+
+* route replace/delete (IPv4 only, one batch)
+* apply or restore DNS presets
+
+The helper is deliberately dependency-free so it works on Debian and Red Hat
+systems with only Python's standard library.  Passwordless mode installs a
+polkit rule that is scoped to this exact program path, so the user can perform
+these operations without being asked for a password again.
+"""
+
+from __future__ import annotations
+
+import base64
+import fcntl
+import ipaddress
+import json
+import os
+import pwd
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+VERSION = "1.2.0"
+HELPER_PATH = Path("/usr/libexec/devnet/devnet-helper")
+STATE_DIR = Path("/var/lib/devnet")
+DNS_STATE = STATE_DIR / "dns.json"
+DNS_BACKUP = STATE_DIR / "dns-backup.json"
+POLKIT_RULE = Path("/etc/polkit-1/rules.d/50-devnet.rules")
+LOCK_PATH = Path("/run/devnet-helper.lock")
+RESOLV_CONF = Path("/etc/resolv.conf")
+MAX_REQUEST_BYTES = 4_000_000
+MAX_OPERATIONS = 4096
+MAX_SERVERS = 8
+MAX_LINKS = 128
+
+SAFE_ENV = {
+    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "LC_ALL": "C",
+    "LANG": "C",
+    "SYSTEMD_PAGER": "",
+    "SYSTEMD_COLORS": "0",
+}
+
+IFACE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,15}$")
+USER_RE = re.compile(r"^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,31}$")
+SKIP_DNS_PREFIXES = (
+    "lo",
+    "docker",
+    "veth",
+    "virbr",
+    "br-",
+    "podman",
+    "lxc",
+    "lxd",
+    "cni",
+    "flannel",
+    "kube",
+    "vmnet",
+    "vboxnet",
+)
+
+
+class HelperError(RuntimeError):
+    """An error that is safe and useful to show in the GUI."""
+
+
+# --------------------------------------------------------------------------- I/O
+
+
+def run(
+    args: Sequence[str],
+    *,
+    input_text: Optional[str] = None,
+    timeout: float = 30,
+) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(
+            list(args),
+            input=input_text,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            check=False,
+            env=SAFE_ENV,
+        )
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(list(args), 127, "", "command not found")
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(list(args), 124, "", "timed out")
+    except OSError as exc:
+        return subprocess.CompletedProcess(list(args), 126, "", str(exc))
+
+
+def fail(message: str) -> "None":
+    raise HelperError(message)
+
+
+def require_root() -> None:
+    if os.geteuid() != 0:
+        fail("This operation needs root privileges.")
+
+
+def caller_uid() -> Optional[int]:
+    raw = os.environ.get("PKEXEC_UID", "")
+    if raw.isdigit():
+        return int(raw)
+    if os.geteuid() != 0:
+        return os.getuid()
+    return None
+
+
+def caller_name() -> str:
+    uid = caller_uid()
+    if uid is None:
+        return ""
+    try:
+        return pwd.getpwuid(uid).pw_name
+    except KeyError:
+        return ""
+
+
+def write_json(path: Path, value: Any, mode: int = 0o600) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+    try:
+        os.chmod(path.parent, 0o755)
+    except OSError:
+        pass
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent))
+    try:
+        os.fchmod(descriptor, mode)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(value, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        os.chmod(path, mode)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def load_json(path: Path) -> Any:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as exc:
+        fail(f"Could not read {path}: {exc}")
+
+
+# ------------------------------------------------------------------ validation
+
+
+def ipv4(value: Any) -> str:
+    if not isinstance(value, str):
+        fail("Invalid IPv4 address.")
+    try:
+        return str(ipaddress.IPv4Address(value.strip()))
+    except ValueError:
+        fail(f"Invalid IPv4 address: {value!r}")
+
+
+def any_ip(value: Any) -> Optional[str]:
+    """IPv4 or IPv6, used only when preserving an existing resolver list."""
+    try:
+        return str(ipaddress.ip_address(str(value).strip()))
+    except ValueError:
+        return None
+
+
+def cidr(value: Any) -> str:
+    if not isinstance(value, str):
+        fail("Invalid IPv4 network.")
+    try:
+        return str(ipaddress.IPv4Network(value.strip(), strict=True))
+    except ValueError:
+        fail(f"Invalid IPv4 network: {value!r}")
+
+
+def interface(value: Any) -> str:
+    if not isinstance(value, str) or not IFACE_RE.fullmatch(value):
+        fail("Invalid network interface name.")
+    if value.startswith("-"):
+        fail("Invalid network interface name.")
+    return value
+
+
+def request_path_safe(path: Path) -> None:
+    try:
+        info = path.lstat()
+    except OSError as exc:
+        fail(f"Could not read request: {exc}")
+    if not stat.S_ISREG(info.st_mode):
+        fail("The request must be a regular JSON file.")
+    if info.st_size > MAX_REQUEST_BYTES:
+        fail("Request is too large.")
+    uid = caller_uid()
+    if uid is not None and info.st_uid != uid:
+        fail("The request file does not belong to the invoking user.")
+
+
+def read_request(argument: Optional[str]) -> Dict[str, Any]:
+    if not argument:
+        return {}
+    path = Path(argument)
+    if not path.is_absolute():
+        fail("Request path must be absolute.")
+    request_path_safe(path)
+    flags = os.O_RDONLY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(str(path), flags)
+    except OSError as exc:
+        fail(f"Could not open request: {exc}")
+    try:
+        raw = os.read(descriptor, MAX_REQUEST_BYTES + 1)
+    finally:
+        os.close(descriptor)
+    if len(raw) > MAX_REQUEST_BYTES:
+        fail("Request is too large.")
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        fail(f"Request is not valid JSON: {exc}")
+    if not isinstance(value, dict):
+        fail("Request must be a JSON object.")
+    return value
+
+
+def validated_servers(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > MAX_SERVERS:
+        fail("Invalid DNS server list.")
+    result: List[str] = []
+    for item in value:
+        address = ipv4(item)
+        if address not in result:
+            result.append(address)
+    return result
+
+
+def validated_operations(value: Any) -> List[Dict[str, str]]:
+    if not isinstance(value, list):
+        fail("Invalid route operation list.")
+    if len(value) > MAX_OPERATIONS:
+        fail("Too many route operations in one request.")
+    operations: List[Dict[str, str]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            fail("Invalid route operation.")
+        action = item.get("op")
+        if action not in {"replace", "delete"}:
+            fail("Unsupported route operation.")
+        operation = {
+            "op": action,
+            "cidr": cidr(item.get("cidr")),
+            "gateway": ipv4(item.get("gateway")),
+            "device": interface(item.get("device")),
+        }
+        operations.append(operation)
+    return operations
+
+
+def passwordless_rule(user: str) -> str:
+    quoted = json.dumps(user)
+    return f"""/* Installed by DevNet. Scoped to the DevNet helper for exactly one user. */
+polkit.addRule(function(action, subject) {{
+    if (action.id !== "org.freedesktop.policykit.exec") return;
+    if (!subject.local || !subject.active) return;
+    if (subject.user !== {quoted}) return;
+    if (action.lookup("program") !== "{HELPER_PATH}") return;
+    return polkit.Result.YES;
+}});
+"""
+
+
+# --------------------------------------------------------------------- routes
+
+
+def apply_routes(operations: List[Dict[str, str]]) -> None:
+    if not operations:
+        return
+    lines = []
+    for operation in operations:
+        line = (
+            f"route {operation['op']} {operation['cidr']} "
+            f"via {operation['gateway']} dev {operation['device']}"
+        )
+        lines.append(line)
+    result = run(["ip", "-4", "-batch", "-"], input_text="\n".join(lines) + "\n", timeout=90)
+    output = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
+    benign = (
+        "RTNETLINK answers: File exists",
+        "RTNETLINK answers: No such process",
+    )
+    problems = []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if any(marker in line for marker in benign):
+            continue
+        problems.append(line)
+    if problems:
+        message = " · ".join(problems[:3])
+        fail(message[:500])
+    if result.returncode != 0 and not output:
+        fail(f"ip exited with status {result.returncode}.")
+
+
+# ------------------------------------------------------------------------ DNS
+
+
+def dns_backend() -> str:
+    if shutil.which("resolvectl"):
+        result = run(["resolvectl", "status"], timeout=6)
+        if result.returncode == 0:
+            return "systemd-resolved"
+    if shutil.which("nmcli"):
+        result = run(["nmcli", "general", "status"], timeout=6)
+        if result.returncode == 0:
+            return "NetworkManager"
+    if RESOLV_CONF.exists():
+        return "resolv.conf"
+    return ""
+
+
+def skip_dns_link(name: str) -> bool:
+    return name == "lo" or name.startswith(SKIP_DNS_PREFIXES)
+
+
+def resolved_links() -> Dict[str, List[str]]:
+    """Current per-link servers from ``resolvectl dns``."""
+    result = run(["resolvectl", "dns"], timeout=8)
+    if result.returncode != 0:
+        fail("Could not read the systemd-resolved link list.")
+    links: Dict[str, List[str]] = {}
+    for line in result.stdout.splitlines():
+        match = re.match(r"^Link\s+\d+\s+\(([^)]+)\):\s*(.*)$", line.strip())
+        if not match:
+            continue
+        name = match.group(1)
+        if skip_dns_link(name):
+            continue
+        servers = []
+        for token in match.group(2).split():
+            address = any_ip(token)
+            if address:
+                servers.append(address)
+        links[name] = servers
+    return links
+
+
+def nm_devices() -> List[str]:
+    result = run(["nmcli", "-t", "-f", "DEVICE,STATE", "device", "status"], timeout=8)
+    if result.returncode != 0:
+        fail("Could not read NetworkManager devices.")
+    devices: List[str] = []
+    for line in result.stdout.splitlines():
+        fields = line.split(":")
+        if len(fields) < 2:
+            continue
+        name, state = fields[0], fields[1]
+        if state == "connected" and not name.startswith(("lo", "docker", "veth", "br-", "virbr")):
+            devices.append(name)
+    return devices
+
+
+def load_dns_backup() -> Optional[Dict[str, Any]]:
+    value = load_json(DNS_BACKUP)
+    if value is None:
+        return None
+    if not isinstance(value, dict) or value.get("backend") not in {
+        "systemd-resolved",
+        "NetworkManager",
+        "resolv.conf",
+    }:
+        fail("The saved DNS backup is damaged. Reboot or restore it manually.")
+    return value
+
+
+def save_dns_backup(value: Dict[str, Any]) -> None:
+    write_json(DNS_BACKUP, value, mode=0o600)
+
+
+def read_resolv_conf() -> Dict[str, Any]:
+    try:
+        info = RESOLV_CONF.stat()
+        raw = RESOLV_CONF.read_bytes()
+    except OSError as exc:
+        fail(f"Could not read /etc/resolv.conf: {exc}")
+    return {
+        "exists": True,
+        "mode": stat.S_IMODE(info.st_mode),
+        "data": base64.b64encode(raw).decode("ascii"),
+    }
+
+
+def write_resolv_conf(content: bytes, mode: int = 0o644) -> None:
+    try:
+        # Open (rather than replace) so a symlink managed by the system stays
+        # a symlink.  A partial write is no worse than the file we are replacing.
+        with RESOLV_CONF.open("wb") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(RESOLV_CONF, mode)
+    except OSError as exc:
+        fail(f"Could not write /etc/resolv.conf: {exc}")
+
+
+def resolv_conf_with_servers(original: bytes, servers: List[str]) -> bytes:
+    lines = original.decode("utf-8", "replace").splitlines()
+    kept = [line for line in lines if not line.lstrip().startswith("nameserver ")]
+    # Drop the marker block from an older DevNet version, if present.
+    cleaned = []
+    skip = False
+    for line in kept:
+        if line.startswith("# BEGIN DEVNET"):
+            skip = True
+            continue
+        if line.startswith("# END DEVNET"):
+            skip = False
+            continue
+        if not skip:
+            cleaned.append(line)
+    block = ["# BEGIN DEVNET (restored automatically when DNS is set to Automatic) "]
+    block += [f"nameserver {server}" for server in servers]
+    block += ["# END DEVNET"]
+    result = "\n".join(block + cleaned).rstrip() + "\n"
+    return result.encode("utf-8")
+
+
+def backup_resolved(servers: List[str], current: Dict[str, List[str]]) -> Dict[str, Any]:
+    backup = load_dns_backup()
+    if backup is not None and backup.get("backend") != "systemd-resolved":
+        # The network backend changed while a preset was active. Restore the
+        # old state before taking a fresh backup.
+        reset_dns(flush=False)
+        backup = None
+    if backup is None:
+        backup = {"backend": "systemd-resolved", "created": int(time.time()), "links": {}}
+    links = backup.setdefault("links", {})
+    if not isinstance(links, dict):
+        fail("The saved DNS backup is damaged.")
+    if len(links) > MAX_LINKS:
+        fail("Too many network links.")
+    for name, old_servers in current.items():
+        if name not in links:
+            links[name] = list(old_servers)
+    return backup
+
+
+def apply_resolved(servers: List[str]) -> None:
+    current = resolved_links()
+    if not current:
+        fail("systemd-resolved has no active network links.")
+    backup = backup_resolved(servers, current)
+    save_dns_backup(backup)
+    errors = []
+    for name in current:
+        result = run(["resolvectl", "dns", name, *servers], timeout=10)
+        if result.returncode != 0:
+            message = (result.stderr or result.stdout or "").strip()
+            if "No such device" in message or "not up" in message.lower():
+                continue
+            errors.append(message.splitlines()[-1] if message else f"Could not set DNS on {name}.")
+    if errors:
+        fail(errors[0][:500])
+
+
+def nm_dns_for_device(name: str) -> List[str]:
+    result = run(["nmcli", "-t", "-g", "IP4.DNS", "device", "show", name], timeout=8)
+    if result.returncode != 0:
+        return []
+    text = result.stdout.strip().replace("|", " ")
+    servers = []
+    for token in text.replace(",", " ").split():
+        address = any_ip(token)
+        if address:
+            servers.append(address)
+    return servers
+
+
+def nm_ignore_auto(name: str) -> str:
+    """The profile's current ``ipv4.ignore-auto-dns`` value (``yes`` or ``no``)."""
+    result = run(
+        ["nmcli", "-t", "-g", "ipv4.ignore-auto-dns", "device", "show", name],
+        timeout=8,
+    )
+    if result.returncode != 0:
+        return "no"
+    return "yes" if result.stdout.strip().lower() in {"yes", "1", "true"} else "no"
+
+
+def apply_network_manager(servers: List[str]) -> None:
+    devices = nm_devices()
+    if not devices:
+        fail("NetworkManager has no connected devices.")
+    backup = load_dns_backup()
+    if backup is not None and backup.get("backend") != "NetworkManager":
+        reset_dns(flush=False)
+        backup = None
+    if backup is None:
+        backup = {"backend": "NetworkManager", "created": int(time.time()), "devices": {}}
+    saved = backup.setdefault("devices", {})
+    if not isinstance(saved, dict):
+        fail("The saved DNS backup is damaged.")
+    if len(saved) > MAX_LINKS:
+        fail("Too many network devices.")
+    for name in devices:
+        if name not in saved:
+            # ``nmcli device modify`` writes to the connection profile, so the
+            # original DNS servers *and* the ignore-auto-dns flag must be saved
+            # to be able to put the profile back later.
+            saved[name] = {
+                "servers": nm_dns_for_device(name),
+                "ignore_auto": nm_ignore_auto(name),
+            }
+    save_dns_backup(backup)
+    errors = []
+    joined = ",".join(servers)
+    for name in devices:
+        result = run(
+            ["nmcli", "device", "modify", name, "ipv4.dns", joined, "ipv4.ignore-auto-dns", "yes"],
+            timeout=15,
+        )
+        if result.returncode != 0:
+            message = (result.stderr or result.stdout or "").strip()
+            errors.append(message.splitlines()[-1] if message else f"Could not set DNS on {name}.")
+    if errors:
+        fail(errors[0][:500])
+
+
+def apply_resolv_conf(servers: List[str]) -> None:
+    backup = load_dns_backup()
+    if backup is not None and backup.get("backend") != "resolv.conf":
+        reset_dns(flush=False)
+        backup = None
+    if backup is None:
+        backup = {"backend": "resolv.conf", "created": int(time.time()), "file": read_resolv_conf()}
+        save_dns_backup(backup)
+    file_state = backup.get("file", {})
+    if not isinstance(file_state, dict) or not file_state.get("data"):
+        fail("The saved resolv.conf backup is damaged.")
+    try:
+        original = base64.b64decode(file_state["data"], validate=True)
+    except (ValueError, KeyError):
+        fail("The saved resolv.conf backup is damaged.")
+    mode = int(file_state.get("mode", 0o644))
+    write_resolv_conf(resolv_conf_with_servers(original, servers), mode)
+
+
+def restore_resolved(backup: Dict[str, Any]) -> None:
+    links = backup.get("links", {})
+    if not isinstance(links, dict):
+        fail("The saved DNS backup is damaged.")
+    current = resolved_links()
+    errors = []
+    for name, servers in links.items():
+        if not isinstance(name, str) or not isinstance(servers, list):
+            continue
+        if skip_dns_link(name):
+            continue
+        # Do not resurrect a resolver for a VPN that disconnected.
+        if current and name not in current:
+            continue
+        cleaned = []
+        for server in servers:
+            address = any_ip(server)
+            if address:
+                cleaned.append(address)
+        if cleaned:
+            result = run(["resolvectl", "dns", name, *cleaned], timeout=10)
+        else:
+            result = run(["resolvectl", "dns", name, ""], timeout=10)
+        if result.returncode != 0:
+            message = (result.stderr or result.stdout or "").strip()
+            if "No such device" in message or "not up" in message.lower():
+                continue
+            errors.append(message.splitlines()[-1] if message else f"Could not restore DNS on {name}.")
+    if errors:
+        fail(errors[0][:500])
+
+
+def restore_network_manager(backup: Dict[str, Any]) -> None:
+    saved = backup.get("devices", {})
+    if not isinstance(saved, dict):
+        fail("The saved DNS backup is damaged.")
+    current = set(nm_devices())
+    errors = []
+    for name, state in saved.items():
+        if not isinstance(name, str):
+            continue
+        if current and name not in current:
+            continue
+        servers = state.get("servers", []) if isinstance(state, dict) else []
+        cleaned = []
+        for server in servers:
+            address = any_ip(server)
+            if address:
+                cleaned.append(address)
+        ignore_auto = "yes" if isinstance(state, dict) and state.get("ignore_auto") == "yes" else "no"
+        # Put the profile's saved settings back first, then reapply. Calling
+        # ``reapply`` alone would only reapply the preset that we wrote earlier.
+        result = run(
+            ["nmcli", "device", "modify", name, "ipv4.dns", ",".join(cleaned),
+             "ipv4.ignore-auto-dns", ignore_auto],
+            timeout=15,
+        )
+        if result.returncode == 0:
+            result = run(["nmcli", "device", "reapply", name], timeout=20)
+        if result.returncode != 0:
+            message = (result.stderr or result.stdout or "").strip()
+            if "not found" in message.lower() or "No such device" in message:
+                continue
+            errors.append(message.splitlines()[-1] if message else f"Could not restore DNS on {name}.")
+    if errors:
+        fail(errors[0][:500])
+
+
+def restore_resolv_conf(backup: Dict[str, Any]) -> None:
+    file_state = backup.get("file", {})
+    if not isinstance(file_state, dict) or not file_state.get("data"):
+        fail("The saved resolv.conf backup is damaged.")
+    try:
+        raw = base64.b64decode(file_state["data"], validate=True)
+    except (ValueError, KeyError):
+        fail("The saved resolv.conf backup is damaged.")
+    write_resolv_conf(raw, int(file_state.get("mode", 0o644)))
+
+
+def flush_dns() -> None:
+    commands = (
+        ["resolvectl", "flush-caches"],
+        ["systemd-resolve", "--flush-caches"],
+        ["nmcli", "general", "reload", "dns-rc"],
+    )
+    for command in commands:
+        if shutil.which(command[0]):
+            result = run(command, timeout=15)
+            if result.returncode == 0:
+                return
+    # nscd is optional; a HUP is harmless if it is not running.
+    if shutil.which("nscd"):
+        run(["nscd", "-i", "hosts"], timeout=10)
+
+
+def reset_dns(flush: bool = True) -> None:
+    backup = load_dns_backup()
+    if backup is None:
+        state = {"servers": [], "updated": int(time.time())}
+        write_json(DNS_STATE, state, mode=0o644)
+        if flush:
+            flush_dns()
+        return
+    backend = backup.get("backend")
+    if backend == "systemd-resolved":
+        restore_resolved(backup)
+    elif backend == "NetworkManager":
+        restore_network_manager(backup)
+    elif backend == "resolv.conf":
+        restore_resolv_conf(backup)
+    else:
+        fail("The saved DNS backup is damaged.")
+    try:
+        DNS_BACKUP.unlink()
+    except FileNotFoundError:
+        pass
+    write_json(DNS_STATE, {"servers": [], "updated": int(time.time())}, mode=0o644)
+    if flush:
+        flush_dns()
+
+
+def set_dns(servers: List[str]) -> None:
+    if not servers:
+        reset_dns()
+        return
+    backend = dns_backend()
+    if not backend:
+        fail("No supported DNS backend was found (systemd-resolved, NetworkManager, resolv.conf).")
+    if backend == "systemd-resolved":
+        apply_resolved(servers)
+    elif backend == "NetworkManager":
+        apply_network_manager(servers)
+    else:
+        apply_resolv_conf(servers)
+    write_json(
+        DNS_STATE,
+        {"servers": servers, "backend": backend, "updated": int(time.time())},
+        mode=0o644,
+    )
+    flush_dns()
+
+
+# --------------------------------------------------------------- passwordless
+
+
+def enable_passwordless(user: str) -> None:
+    if not USER_RE.fullmatch(user or ""):
+        fail("Invalid user name.")
+    caller = caller_name()
+    if caller and user != caller:
+        fail("Passwordless mode can only be enabled for the invoking user.")
+    try:
+        pwd.getpwnam(user)
+    except KeyError:
+        fail(f"Unknown user: {user}")
+    if not POLKIT_RULE.parent.is_dir():
+        fail("polkit is not installed (missing /etc/polkit-1/rules.d).")
+    content = passwordless_rule(user)
+    temporary = POLKIT_RULE.with_name(f".{POLKIT_RULE.name}.{os.getpid()}")
+    try:
+        temporary.write_text(content, encoding="utf-8")
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, POLKIT_RULE)
+        os.chmod(POLKIT_RULE, 0o644)
+    except OSError as exc:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        fail(f"Could not install the polkit rule: {exc}")
+
+
+def remove_passwordless() -> None:
+    try:
+        POLKIT_RULE.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        fail(f"Could not remove the polkit rule: {exc}")
+
+
+# ---------------------------------------------------------------------- status
+
+
+def status() -> Dict[str, Any]:
+    backend = dns_backend()
+    active = []
+    try:
+        value = load_json(DNS_STATE)
+        if isinstance(value, dict) and isinstance(value.get("servers"), list):
+            active = [str(item) for item in value["servers"]]
+    except HelperError:
+        active = []
+    return {
+        "version": VERSION,
+        "helper": str(HELPER_PATH),
+        "root": os.geteuid() == 0,
+        "backend": backend,
+        "dns": active,
+        "passwordless": POLKIT_RULE.is_file(),
+        "networkmanager": bool(shutil.which("nmcli")),
+        "resolved": bool(shutil.which("resolvectl")),
+    }
+
+
+# ------------------------------------------------------------------------ main
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if not args:
+        print("usage: devnet-helper {status|routes-apply|dns-set|dns-reset|dns-flush|"
+              "enable-passwordless|remove-passwordless} [request.json]", file=sys.stderr)
+        return 2
+    action = args[0]
+    if action in {"-h", "--help", "help"}:
+        print(__doc__.strip())
+        return 0
+    if action == "--version":
+        print(f"devnet-helper {VERSION}")
+        return 0
+    if action == "status":
+        print(json.dumps(status(), sort_keys=True))
+        return 0
+    allowed = {
+        "routes-apply",
+        "dns-set",
+        "dns-reset",
+        "dns-flush",
+        "enable-passwordless",
+        "remove-passwordless",
+    }
+    if action not in allowed:
+        print(f"Unknown action: {action}", file=sys.stderr)
+        return 2
+    if len(args) > 2:
+        print("Too many arguments.", file=sys.stderr)
+        return 2
+    lock = None
+    try:
+        require_root()
+        request = read_request(args[1] if len(args) == 2 else None)
+        lock = open(LOCK_PATH, "w")
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        if action == "routes-apply":
+            operations = validated_operations(request.get("ops", []))
+            apply_routes(operations)
+        elif action == "dns-set":
+            servers = validated_servers(request.get("servers", []))
+            set_dns(servers)
+        elif action == "dns-reset":
+            reset_dns()
+        elif action == "dns-flush":
+            flush_dns()
+        elif action == "enable-passwordless":
+            user = request.get("user")
+            if not isinstance(user, str):
+                fail("Missing user name.")
+            enable_passwordless(user)
+        elif action == "remove-passwordless":
+            remove_passwordless()
+        return 0
+    except HelperError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    except Exception as exc:  # pragma: no cover - last-resort safety net
+        print(f"Unexpected helper error: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        if lock is not None:
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+                lock.close()
+            except OSError:
+                pass
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
