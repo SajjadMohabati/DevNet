@@ -9,7 +9,10 @@ import subprocess
 import threading
 from typing import Callable, Optional, Sequence, Union
 
-from gi.repository import GLib
+try:
+    from gi.repository import GLib
+except (ImportError, ModuleNotFoundError):
+    GLib = None  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -57,13 +60,19 @@ def sh(*args: str, timeout: float = 20) -> str:
 
 def on_main(function: Callable) -> None:
     """Run *function* on the GTK main loop, swallowing/logging exceptions."""
+    if GLib is None:
+        try:
+            function()
+        except Exception:
+            log.exception("callback failed")
+        return
 
     def callback():
         try:
             function()
         except Exception:  # pragma: no cover - UI safety net
             log.exception("idle callback failed")
-        return GLib.SOURCE_REMOVE
+        return getattr(GLib, "SOURCE_REMOVE", False)
 
     GLib.idle_add(callback)
 
@@ -116,7 +125,10 @@ def open_uri(uri: str) -> None:
 
 
 def open_folder(path: str) -> None:
-    open_uri(GLib.filename_to_uri(path, None))
+    if GLib is not None and hasattr(GLib, "filename_to_uri"):
+        open_uri(GLib.filename_to_uri(path, None))
+    else:
+        open_uri(f"file://{os.path.abspath(path)}")
 
 
 def read_file(path: str, default: str = "") -> str:

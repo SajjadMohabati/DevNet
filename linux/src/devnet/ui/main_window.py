@@ -25,10 +25,10 @@ from .widgets import AppIcon, Badge, ShortcutRecorder, SidebarRow, label
 log = logging.getLogger(__name__)
 
 PANES: Tuple[Tuple[str, str, str, str], ...] = (
-    ("routes", "Routes", "network-transmit-receive-symbolic", "blue"),
-    ("projects", "Projects", "applications-engineering-symbolic", "green"),
-    ("dns", "DNS", "network-workgroup-symbolic", "indigo"),
-    ("speed", "Speed", "power-profile-performance-symbolic", "orange"),
+    ("routes", "Routes", "devnet-routes-bold-symbolic", "blue"),
+    ("projects", "Projects", "devnet-projects-bold-symbolic", "green"),
+    ("dns", "DNS", "devnet-dns-bold-symbolic", "indigo"),
+    ("speed", "Speed", "devnet-speed-bold-symbolic", "orange"),
 )
 
 
@@ -96,8 +96,11 @@ class MainWindow(Adw.ApplicationWindow):
                 self._take_children(view.toolbar_end),
             )
 
-        self._nav: Dict[str, Tuple[Gtk.ToggleButton, Badge]] = {}
+        self._nav: Dict[str, Tuple[Gtk.ListBoxRow, Badge]] = {}
         self._build_layout()
+        # Show the restored pane's page too, not just its sidebar row and header (the stack
+        # would otherwise stay on its first page, Routes).
+        self._stack.set_visible_child_name(self.pane)
         self._sync_pane_ui()
         self._render_sidebar()
 
@@ -148,8 +151,7 @@ class MainWindow(Adw.ApplicationWindow):
         detail.append(self._banner)
 
         self._stack = Gtk.Stack()
-        self._stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        self._stack.set_transition_duration(120)
+        self._stack.set_transition_type(Gtk.StackTransitionType.NONE)  # instant, like the Mac sidebar
         self._stack.set_vexpand(True)
         for key, _, _, _ in PANES:
             self._stack.add_named(self._views[key], key)
@@ -164,7 +166,7 @@ class MainWindow(Adw.ApplicationWindow):
         revealer.set_reveal_child(False)
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         box.add_css_class("devn-banner")
-        icon = Gtk.Image.new_from_icon_name("dialog-warning-symbolic")
+        icon = Gtk.Image.new_from_icon_name("devnet-warning-symbolic")
         icon.set_valign(Gtk.Align.CENTER)
         box.append(icon)
         self._banner_label = label("", "devn-error")
@@ -184,26 +186,17 @@ class MainWindow(Adw.ApplicationWindow):
         sidebar.add_css_class("devn-sidebar")
         sidebar.set_size_request(236, -1)
 
-        brand = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        brand.add_css_class("devn-brand")
-        if _has_icon(app_info.APP_ID):
-            image = Gtk.Image.new_from_icon_name(app_info.APP_ID)
-            image.set_pixel_size(30)
-            brand.append(image)
-        else:
-            brand.append(AppIcon("DN", None, "blue"))
-        texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        texts.set_valign(Gtk.Align.CENTER)
-        texts.append(label(app_info.APP_NAME, "devn-brand-title"))
-        texts.append(label("Linux · Split tunneling", "devn-brand-subtitle"))
-        brand.append(texts)
-        sidebar.append(brand)
+        # No brand header: like the Mac sidebar, the panes start right under the window controls.
+        spacer = Gtk.Box()
+        spacer.set_size_request(-1, 8)
+        sidebar.append(spacer)
 
-        nav = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        # A selectable list, like the Mac's sidebar List (and GNOME's navigation-sidebar pattern).
+        nav = Gtk.ListBox()
         nav.add_css_class("devn-nav")
+        nav.set_selection_mode(Gtk.SelectionMode.BROWSE)
         nav.set_margin_start(8)
         nav.set_margin_end(8)
-        group: Optional[Gtk.ToggleButton] = None
         for key, title, icon, color in PANES:
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             row.append(AppIcon(None, icon, color, small=True))
@@ -213,16 +206,13 @@ class MainWindow(Adw.ApplicationWindow):
             row.append(spacer)
             badge = Badge()
             row.append(badge)
-            toggle = Gtk.ToggleButton()
-            toggle.set_child(row)
-            toggle.set_tooltip_text(title)
-            if group is None:
-                group = toggle
-            else:
-                toggle.set_group(group)
-            toggle.connect("toggled", self._nav_toggled, key)
-            nav.append(toggle)
-            self._nav[key] = (toggle, badge)
+            item = Gtk.ListBoxRow()
+            item.set_child(row)
+            item.pane_key = key
+            nav.append(item)
+            self._nav[key] = (item, badge)
+        nav.connect("row-selected", self._nav_selected)
+        self._nav_list = nav
         sidebar.append(nav)
 
         sidebar.append(label("NETWORK", "devn-section-label"))
@@ -243,7 +233,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._passwordless.add_css_class("flat")
         content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         content.set_halign(Gtk.Align.START)
-        content.append(Gtk.Image.new_from_icon_name("dialog-password-symbolic"))
+        content.append(Gtk.Image.new_from_icon_name("devnet-key-symbolic"))
         self._passwordless_label = label("Enable Passwordless Mode…")
         content.append(self._passwordless_label)
         self._passwordless.set_child(content)
@@ -297,7 +287,7 @@ class MainWindow(Adw.ApplicationWindow):
         spacer = Gtk.Box()
         spacer.set_hexpand(True)
         credits.append(spacer)
-        about = Gtk.Button.new_from_icon_name("help-about-symbolic")
+        about = Gtk.Button.new_from_icon_name("devnet-info-symbolic")
         about.add_css_class("flat")
         about.set_tooltip_text("About DevNet")
         about.connect("clicked", lambda _b: self._show_about())
@@ -309,7 +299,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _app_menu(self) -> Gtk.MenuButton:
         menu = Gtk.MenuButton()
-        menu.set_icon_name("open-menu-symbolic")
+        menu.set_icon_name("devnet-menu-symbolic")
         menu.add_css_class("flat")
         menu.set_tooltip_text("Main Menu")
         popover = Gtk.Popover()
@@ -330,10 +320,10 @@ class MainWindow(Adw.ApplicationWindow):
             widget.connect("clicked", lambda _b: (popover.popdown(), callback()))
             box.append(widget)
 
-        item("Open Panel", "view-list-symbolic", lambda: self.app.toggle_panel())
-        item("About DevNet", "help-about-symbolic", self._show_about)
+        item("Open Panel", "devnet-window-symbolic", lambda: self.app.toggle_panel())
+        item("About DevNet", "devnet-info-symbolic", self._show_about)
         box.append(Gtk.Separator())
-        item("Quit DevNet", "application-exit-symbolic", lambda: self.app.quit())
+        item("Quit DevNet", "devnet-quit-symbolic", lambda: self.app.quit())
         popover.set_child(box)
         menu.set_popover(popover)
         return menu
@@ -346,10 +336,10 @@ class MainWindow(Adw.ApplicationWindow):
             widgets.append(child)
         return widgets
 
-    def _nav_toggled(self, toggle: Gtk.ToggleButton, key: str) -> None:
-        if self._updating or not toggle.get_active():
+    def _nav_selected(self, _list: Gtk.ListBox, row: Optional[Gtk.ListBoxRow]) -> None:
+        if self._updating or row is None:
             return
-        self.set_pane(key)
+        self.set_pane(row.pane_key)
 
     def set_pane(self, key: str) -> None:
         if key not in self._views:
@@ -370,8 +360,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _sync_pane_ui(self) -> None:
         self._updating = True
         try:
-            for key, (toggle, _badge) in self._nav.items():
-                toggle.set_active(key == self.pane)
+            self._nav_list.select_row(self._nav[self.pane][0])
         finally:
             self._updating = False
         self._sync_header()

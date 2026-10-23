@@ -60,14 +60,14 @@ class SpeedView(Gtk.Box):
         self.toolbar_start = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.toolbar_end = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
 
-        self._test_button = Gtk.Button.new_from_icon_name("power-profile-performance-symbolic")
+        self._test_button = Gtk.Button.new_from_icon_name("devnet-speed-symbolic")
         self._test_button.add_css_class("flat")
         self._test_button.set_tooltip_text("Test download and upload speed")
         self._test_button.connect("clicked", lambda _b: self._toggle_test())
         self.toolbar_end.append(self._test_button)
 
         add_target = button(
-            "list-add-symbolic", "Add a ping target", lambda: self._edit_target(None)
+            "devnet-add-symbolic", "Add a ping target", lambda: self._edit_target(None)
         )
         self.toolbar_end.append(add_target)
 
@@ -93,9 +93,9 @@ class SpeedView(Gtk.Box):
             "panel target and this computer's throughput.",
         )
         stats = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self._live_ping = StatTile("Ping", "preferences-system-time-symbolic", "—", "muted")
-        self._live_down = StatTile("Down", "go-down-symbolic", "0 B/s", "blue")
-        self._live_up = StatTile("Up", "go-up-symbolic", "0 B/s", "orange")
+        self._live_ping = StatTile("Ping", "devnet-clock-symbolic", "—", "muted")
+        self._live_down = StatTile("Down", "devnet-down-symbolic", "0 B/s", "blue")
+        self._live_up = StatTile("Up", "devnet-up-symbolic", "0 B/s", "orange")
         for tile in (self._live_ping, self._live_down, self._live_up):
             stats.append(tile)
         live.append(stats)
@@ -110,9 +110,9 @@ class SpeedView(Gtk.Box):
             "direct, whichever the routing table says.",
         )
         result_stats = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self._down_tile = StatTile("Download", "go-down-symbolic", "—", "blue")
-        self._up_tile = StatTile("Upload", "go-up-symbolic", "—", "orange")
-        self._ping_tile = StatTile("Ping", "preferences-system-time-symbolic", "—", "muted")
+        self._down_tile = StatTile("Download", "devnet-down-symbolic", "—", "blue")
+        self._up_tile = StatTile("Upload", "devnet-up-symbolic", "—", "orange")
+        self._ping_tile = StatTile("Ping", "devnet-clock-symbolic", "—", "muted")
         for tile in (self._down_tile, self._up_tile, self._ping_tile):
             result_stats.append(tile)
         test.append(result_stats)
@@ -127,7 +127,7 @@ class SpeedView(Gtk.Box):
 
         actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         actions.set_halign(Gtk.Align.CENTER)
-        self._start_button = suggested_button("Start Test", "media-playback-start-symbolic", self._toggle_test)
+        self._start_button = suggested_button("Start Test", "devnet-play-symbolic", self._toggle_test)
         self._start_button.set_size_request(220, -1)
         actions.append(self._start_button)
         test.append(actions)
@@ -178,7 +178,7 @@ class SpeedView(Gtk.Box):
     # -- toolbar ----------------------------------------------------------
     def _more_button(self) -> Gtk.MenuButton:
         menu = Gtk.MenuButton()
-        menu.set_icon_name("view-more-symbolic")
+        menu.set_icon_name("devnet-more-symbolic")
         menu.set_tooltip_text("More")
         menu.add_css_class("flat")
         popover = Gtk.Popover()
@@ -232,7 +232,7 @@ class SpeedView(Gtk.Box):
     def _sync_toolbar(self) -> None:
         store = self.store
         self._test_button.set_icon_name(
-            "media-playback-stop-symbolic" if store.running else "power-profile-performance-symbolic"
+            "devnet-stop-symbolic" if store.running else "devnet-speed-symbolic"
         )
         self._test_button.set_tooltip_text("Stop the speed test" if store.running else "Test download and upload speed")
         selected = 1 if store.use_bytes else 0
@@ -243,7 +243,7 @@ class SpeedView(Gtk.Box):
             image = child.get_first_child()
             if isinstance(image, Gtk.Image):
                 image.set_from_icon_name(
-                    "media-playback-stop-symbolic" if store.running else "media-playback-start-symbolic"
+                    "devnet-stop-symbolic" if store.running else "devnet-play-symbolic"
                 )
             text = image.get_next_sibling() if image is not None else None
             if isinstance(text, Gtk.Label):
@@ -336,7 +336,7 @@ class SpeedView(Gtk.Box):
         row.add_css_class("devn-row")
         row.set_valign(Gtk.Align.CENTER)
 
-        show = Gtk.Button.new_from_icon_name("network-transmit-receive-symbolic")
+        show = Gtk.Button.new_from_icon_name("devnet-radio-symbolic")
         show.add_css_class("flat")
         show.set_tooltip_text("Show this target's latency in the panel")
         show.set_sensitive(target.enabled)
@@ -371,7 +371,7 @@ class SpeedView(Gtk.Box):
             row.append(label("off", "devn-row-subtitle", 1.0))
 
         menu = Gtk.MenuButton()
-        menu.set_icon_name("view-more-symbolic")
+        menu.set_icon_name("devnet-more-symbolic")
         menu.add_css_class("flat")
         menu.set_tooltip_text("More actions")
         popover = Gtk.Popover()
@@ -393,16 +393,16 @@ class SpeedView(Gtk.Box):
             widget.connect("clicked", lambda _b: (popover.popdown(), callback()))
             box.append(widget)
 
-        item("Edit…", "document-edit-symbolic", lambda i=index: self._edit_target(i))
+        item("Edit…", "devnet-edit-symbolic", lambda i=index: self._edit_target(i))
         item(
             "Show in Panel",
-            "network-transmit-receive-symbolic",
+            "devnet-radio-symbolic",
             lambda t=target: store.set_menu_host(t),
             target.enabled,
         )
-        item("Copy Host", "edit-copy-symbolic", lambda t=target: clipboard_text(t.host))
+        item("Copy Host", "devnet-copy-symbolic", lambda t=target: clipboard_text(t.host))
         box.append(Gtk.Separator())
-        item("Delete", "user-trash-symbolic", lambda t=target: store.remove_target(t))
+        item("Delete", "devnet-trash-symbolic", lambda t=target: store.remove_target(t))
         popover.set_child(box)
         menu.set_popover(popover)
         row.append(menu)
@@ -479,7 +479,7 @@ class SpeedView(Gtk.Box):
         row.append(label(f"↓ {format_speed(result.down, self.store.use_bytes)}", "devn-mono blue"))
         row.append(label(f"↑ {format_speed(result.up, self.store.use_bytes)}", "devn-mono orange"))
         row.append(label(f"{result.ping} ms", "devn-mono dim-label"))
-        copy = Gtk.Button.new_from_icon_name("edit-copy-symbolic")
+        copy = Gtk.Button.new_from_icon_name("devnet-copy-symbolic")
         copy.add_css_class("flat")
         copy.set_tooltip_text("Copy result")
         copy.connect(

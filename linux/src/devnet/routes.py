@@ -16,7 +16,10 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Sequence
 
-from gi.repository import GLib
+try:
+    from gi.repository import GLib
+except (ImportError, ModuleNotFoundError):
+    GLib = None  # type: ignore
 
 from . import privilege
 from .ipv4 import ip_string, normalize_cidr, normalize_domain, parse_cidr, parse_ip
@@ -164,7 +167,8 @@ class RouteStore:
         if autostart:
             self._ensure_worker()
             self.reconcile()
-            GLib.timeout_add_seconds(10, self._gateway_tick)
+            if GLib is not None:
+                GLib.timeout_add_seconds(10, self._gateway_tick)
 
     # ------------------------------------------------------------------ events
 

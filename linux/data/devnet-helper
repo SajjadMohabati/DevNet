@@ -32,7 +32,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 HELPER_PATH = Path("/usr/libexec/devnet/devnet-helper")
 STATE_DIR = Path("/var/lib/devnet")
 DNS_STATE = STATE_DIR / "dns.json"
@@ -273,9 +273,11 @@ def validated_operations(value: Any) -> List[Dict[str, str]]:
         operation = {
             "op": action,
             "cidr": cidr(item.get("cidr")),
-            "gateway": ipv4(item.get("gateway")),
-            "device": interface(item.get("device")),
         }
+        if action == "replace" or item.get("gateway"):
+            operation["gateway"] = ipv4(item.get("gateway"))
+        if action == "replace" or item.get("device"):
+            operation["device"] = interface(item.get("device"))
         operations.append(operation)
     return operations
 
@@ -301,12 +303,21 @@ def apply_routes(operations: List[Dict[str, str]]) -> None:
         return
     lines = []
     for operation in operations:
-        line = (
-            f"route {operation['op']} {operation['cidr']} "
-            f"via {operation['gateway']} dev {operation['device']}"
-        )
+        if operation["op"] == "delete":
+            # Always pin the path: a bare "route del CIDR" removes whichever route matches
+            # first — possibly the VPN's own route for that network.
+            line = f"route del {operation['cidr']}"
+            if operation.get("gateway"):
+                line += f" via {operation['gateway']}"
+            if operation.get("device"):
+                line += f" dev {operation['device']}"
+        else:
+            line = (
+                f"route replace {operation['cidr']} "
+                f"via {operation['gateway']} dev {operation['device']}"
+            )
         lines.append(line)
-    result = run(["ip", "-4", "-batch", "-"], input_text="\n".join(lines) + "\n", timeout=90)
+    result = run(["ip", "-4", "-force", "-batch", "-"], input_text="\n".join(lines) + "\n", timeout=90)
     output = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
     benign = (
         "RTNETLINK answers: File exists",

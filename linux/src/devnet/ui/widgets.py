@@ -95,7 +95,10 @@ class AppIcon(Gtk.Box):
         self.set_size_request(20 if small else 26, 20 if small else 26)
         if icon:
             image = Gtk.Image.new_from_icon_name(icon)
-            image.set_pixel_size(13 if small else 15)
+            image.add_css_class("devn-app-glyph")
+            image.set_pixel_size(12 if small else 16)
+            # Fill the whole square so GTK draws the glyph dead centre (a vertical Box would top-align it).
+            image.set_size_request(20 if small else 26, 20 if small else 26)
             self.append(image)
         else:
             self.append(label(text or "??", None, 0.5))
@@ -169,8 +172,9 @@ class IPLine(Gtk.Box):
         self._value = label(value or "—", "devn-ip-value", 1.0)
         self._value.set_halign(Gtk.Align.END)
         self._value.set_selectable(True)
+        self._value.set_focusable(False)   # selectable, but don't grab focus and show a caret on open
         self.append(self._value)
-        self._copy = Gtk.Button.new_from_icon_name("edit-copy-symbolic")
+        self._copy = Gtk.Button.new_from_icon_name("devnet-copy-symbolic")
         self._copy.add_css_class("devn-ip-copy")
         self._copy.set_tooltip_text(f"Copy {title}")
         self._copy.set_sensitive(bool(value))
@@ -191,14 +195,14 @@ class IPLine(Gtk.Box):
         if not text or text == "—":
             return
         clipboard_text(text)
-        self._copy.set_icon_name("object-select-symbolic")
+        self._copy.set_icon_name("devnet-check-symbolic")
         if self._reset_source is not None:
             GLib.source_remove(self._reset_source)
         self._reset_source = GLib.timeout_add(1200, self._reset_icon)
 
     def _reset_icon(self) -> bool:
         self._reset_source = None
-        self._copy.set_icon_name("edit-copy-symbolic")
+        self._copy.set_icon_name("devnet-copy-symbolic")
         return False
 
 
@@ -228,31 +232,44 @@ class StatTile(Gtk.Box):
         self.set_opacity(1.0 if active or not getattr(self, "_running", False) else 0.45)
 
 
-class Tile(Gtk.Button):
+class Tile(Gtk.Box):
     """Control-Center-style quick toggle used in the panel."""
 
     def __init__(self, icon: str, title: str, subtitle: str = "",
                  callback: Optional[Callable] = None) -> None:
-        super().__init__()
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.add_css_class("devn-tile")
         self._callback = callback
-        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+
+        # Primary clickable content
+        self._main = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._main.set_hexpand(True)
+        self._main.set_valign(Gtk.Align.CENTER)
+
         self._icon = Gtk.Image.new_from_icon_name(icon)
         self._icon.set_pixel_size(14)
         self._icon.add_css_class("devn-tile-icon")
         self._icon.set_size_request(28, 28)
-        row.append(self._icon)
+        self._main.append(self._icon)
+
         texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         texts.set_hexpand(True)
+        texts.set_valign(Gtk.Align.CENTER)
         self._title = label(title, "devn-tile-title")
         self._subtitle = label(subtitle, "devn-tile-subtitle")
         texts.append(self._title)
         texts.append(self._subtitle)
-        row.append(texts)
-        self._accessory = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
-        row.append(self._accessory)
-        self.set_child(row)
-        self.connect("clicked", self._clicked)
+        self._main.append(texts)
+        self.append(self._main)
+
+        self._accessory = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        self._accessory.set_valign(Gtk.Align.CENTER)
+        self.append(self._accessory)
+
+        if callback is not None:
+            gesture = Gtk.GestureClick()
+            gesture.connect("released", lambda _g, _n, _x, _y: self._clicked())
+            self._main.add_controller(gesture)
 
     def add_accessory(self, widget: Gtk.Widget) -> None:
         self._accessory.append(widget)
@@ -269,7 +286,7 @@ class Tile(Gtk.Button):
     def set_subtitle(self, subtitle: str) -> None:
         self._subtitle.set_text(subtitle)
 
-    def _clicked(self, _button: Gtk.Button) -> None:
+    def _clicked(self) -> None:
         if self._callback:
             self._callback()
 
@@ -529,29 +546,56 @@ class SpeedChart(Gtk.DrawingArea):
                 c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
                 cr.curve_to(c1[0], c1[1], c2[0], c2[1], p2[0], p2[1])
 
+        try:
+            import cairo  # noqa: F401
+            has_cairo = True
+        except ImportError:
+            has_cairo = False
+
         def series(phase: str, color: Tuple[float, float, float]) -> Optional[Tuple[float, float]]:
             points = [point(sample) for sample in self._samples if sample[1] == phase]
             if len(points) < 2:
                 return None
-            cr.set_source_rgba(*color, 0.12)
+
+            # Area fill with smooth vertical gradient
+            if has_cairo:
+                import cairo
+                gradient = cairo.LinearGradient(0, 0, 0, height)
+                gradient.add_color_stop_rgba(0.0, color[0], color[1], color[2], 0.25)
+                gradient.add_color_stop_rgba(1.0, color[0], color[1], color[2], 0.02)
+                cr.set_source(gradient)
+            else:
+                cr.set_source_rgba(color[0], color[1], color[2], 0.14)
+
             curve(points)
             cr.line_to(points[-1][0], height)
             cr.line_to(points[0][0], height)
             cr.close_path()
             cr.fill()
+
+            # Smooth curve line
             cr.set_source_rgba(*color, 1.0)
-            cr.set_line_width(1.6)
+            cr.set_line_width(1.8)
             cr.set_line_join(1)  # cairo.LINE_JOIN_ROUND
+            cr.set_line_cap(1)   # cairo.LINE_CAP_ROUND
             curve(points)
             cr.stroke()
             return points[-1]
 
         down_last = series("download", (0.208, 0.518, 0.894))
         up_last = series("upload", (0.902, 0.380, 0.0))
-        last = up_last or down_last
-        if last is not None:
-            cr.set_source_rgba(0.5, 0.5, 0.5, 0.9 if not self._running else 0.6)
-            cr.arc(last[0], last[1], 3, 0, math.pi * 2)
+
+        # Tip dot matches the active phase color with a glowing halo
+        last_point = up_last or down_last
+        last_color = (0.902, 0.380, 0.0) if up_last is not None else (0.208, 0.518, 0.894)
+        if last_point is not None:
+            # Outer glow
+            cr.set_source_rgba(last_color[0], last_color[1], last_color[2], 0.30 if self._running else 0.18)
+            cr.arc(last_point[0], last_point[1], 6, 0, math.pi * 2)
+            cr.fill()
+            # Solid tip
+            cr.set_source_rgba(last_color[0], last_color[1], last_color[2], 1.0)
+            cr.arc(last_point[0], last_point[1], 3, 0, math.pi * 2)
             cr.fill()
 
 

@@ -28,7 +28,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
-from gi.repository import GLib
+try:
+    from gi.repository import GLib
+except (ImportError, ModuleNotFoundError):
+    GLib = None  # type: ignore
 
 from .ipv4 import normalize_domain, parse_ip
 from .network import is_physical_interface, is_tunnel_name, ping_host, route_get
@@ -272,12 +275,25 @@ class SpeedTester:
         try:
             while True:
                 self.check()
-                connection.request(
-                    "GET",
-                    f"/__down?bytes={CHUNK_BYTES}",
-                    headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
-                )
-                response = connection.getresponse()
+                try:
+                    connection.request(
+                        "GET",
+                        f"/__down?bytes={CHUNK_BYTES}",
+                        headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
+                    )
+                    response = connection.getresponse()
+                except (OSError, http.client.HTTPException):
+                    try:
+                        connection.close()
+                    except Exception:
+                        pass
+                    connection = _http_connection(timeout=8)
+                    connection.request(
+                        "GET",
+                        f"/__down?bytes={CHUNK_BYTES}",
+                        headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
+                    )
+                    response = connection.getresponse()
                 if response.status >= 400:
                     raise OSError(f"HTTP {response.status}")
                 while True:
@@ -299,7 +315,10 @@ class SpeedTester:
                 if time.monotonic() - start >= PHASE_SECONDS:
                     break
         finally:
-            connection.close()
+            try:
+                connection.close()
+            except Exception:
+                pass
         value = average(events)
         if value <= 0 and events:
             value = events[-1][1] / max(events[-1][0], 0.1)
@@ -316,19 +335,22 @@ class SpeedTester:
         header = (
             "POST /__up HTTP/1.1\r\n"
             f"Host: {BASE_HOST}\r\n"
-            "User-Agent: " + USER_AGENT + "\r\n"
+            f"User-Agent: {USER_AGENT}\r\n"
             "Content-Type: application/octet-stream\r\n"
-            "Transfer-Encoding: chunked\r\n"
+            f"Content-Length: {CHUNK_BYTES}\r\n"
             "Connection: close\r\n\r\n"
         )
-        payload = b"\0" * 262_144
-        frame = b"%x\r\n" % len(payload) + payload + b"\r\n"
+        chunk_size = 262_144
+        payload = b"\0" * chunk_size
         try:
             sock.sendall(header.encode("ascii"))
             while True:
                 self.check()
-                sock.sendall(frame)
-                total += len(payload)
+                to_send = min(chunk_size, CHUNK_BYTES - total)
+                if to_send <= 0:
+                    break
+                sock.sendall(payload[:to_send])
+                total += to_send
                 now = time.monotonic() - start
                 events.append((now, float(total)))
                 if now - last_time >= 0.1:
@@ -338,11 +360,9 @@ class SpeedTester:
                     self.publish(smoothed, 0.575 + 0.425 * min(now / PHASE_SECONDS, 1), "upload")
                 if total >= CHUNK_BYTES or now >= PHASE_SECONDS:
                     break
-            # Finish the chunked body so the server can answer.
-            try:
-                sock.sendall(b"0\r\n\r\n")
-            except OSError:
-                pass
+        except (OSError, socket.error):
+            if not events:
+                raise
         finally:
             try:
                 sock.close()
@@ -395,7 +415,8 @@ class SpeedStore:
         self._closed = False
 
         self._load()
-        self._monitor_source = GLib.timeout_add_seconds(MONITOR_SECONDS, self._monitor_tick)
+        if GLib is not None:
+            self._monitor_source = GLib.timeout_add_seconds(MONITOR_SECONDS, self._monitor_tick)
 
     # -- notification -----------------------------------------------------
     def subscribe(self, callback: Callable[[], None]) -> Callable[[], None]:
@@ -419,7 +440,7 @@ class SpeedStore:
     def close(self) -> None:
         self._closed = True
         self.stop()
-        if self._monitor_source is not None:
+        if self._monitor_source is not None and GLib is not None:
             try:
                 GLib.source_remove(self._monitor_source)
             except Exception:

@@ -104,13 +104,13 @@ install_dependencies() {
     note "Installing Debian/Ubuntu runtime packages"
     apt-get install -y --no-install-recommends \
       python3 python3-gi python3-gi-cairo \
-      gir1.2-gtk-4.0 gir1.2-adw-1 \
+      gir1.2-gtk-4.0 gir1.2-adw-1 librsvg2-common \
       iproute2 iputils-ping \
       desktop-file-utils hicolor-icon-theme \
       pkexec >/dev/null 2>&1 || \
     apt-get install -y --no-install-recommends \
       python3 python3-gi python3-gi-cairo \
-      gir1.2-gtk-4.0 gir1.2-adw-1 \
+      gir1.2-gtk-4.0 gir1.2-adw-1 librsvg2-common \
       iproute2 iputils-ping \
       desktop-file-utils hicolor-icon-theme \
       policykit-1 >/dev/null 2>&1 || \
@@ -118,14 +118,14 @@ install_dependencies() {
   elif command -v dnf >/dev/null 2>&1; then
     note "Installing Fedora/RHEL runtime packages"
     dnf install -y \
-      python3 python3-gobject python3-cairo gtk4 libadwaita \
+      python3 python3-gobject python3-cairo gtk4 libadwaita librsvg2 \
       iproute iputils polkit \
       desktop-file-utils hicolor-icon-theme >/dev/null 2>&1 || \
     warn "Some packages could not be installed automatically; see linux/README.md."
   elif command -v yum >/dev/null 2>&1; then
     note "Installing Red Hat runtime packages"
     yum install -y \
-      python3 python3-gobject python3-cairo gtk4 libadwaita \
+      python3 python3-gobject python3-cairo gtk4 libadwaita librsvg2 \
       iproute iputils polkit \
       desktop-file-utils hicolor-icon-theme >/dev/null 2>&1 || \
     warn "Some packages could not be installed automatically; see linux/README.md."

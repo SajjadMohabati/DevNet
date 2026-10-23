@@ -154,11 +154,11 @@ class RouteBatchTest(unittest.TestCase):
         with mock.patch.object(helper, "run", return_value=result) as run:
             helper.apply_routes(operations)
         args, kwargs = run.call_args
-        self.assertEqual(args[0], ["ip", "-4", "-batch", "-"])
+        self.assertEqual(args[0], ["ip", "-4", "-force", "-batch", "-"])
         self.assertEqual(
             kwargs["input_text"],
             "route replace 10.0.0.0/24 via 192.168.1.1 dev wlan0\n"
-            "route delete 10.1.0.0/16 via 10.8.0.1 dev tun0\n",
+            "route del 10.1.0.0/16 via 10.8.0.1 dev tun0\n",
         )
 
     def test_benign_errors_are_ignored(self) -> None:

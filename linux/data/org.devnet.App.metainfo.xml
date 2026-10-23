@@ -44,7 +44,7 @@
   </keywords>
   <content_rating type="oars-1.1"/>
   <releases>
-    <release version="1.2.0" date="2026-10-22">
+    <release version="1.3.0" date="2026-10-23">
       <description>
         <p>Initial native Linux release with Debian and Red Hat packaging.</p>
       </description>

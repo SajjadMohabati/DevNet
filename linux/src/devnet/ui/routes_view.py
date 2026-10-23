@@ -26,7 +26,7 @@ class RoutesView(Gtk.Box):
         self.toolbar_start = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.toolbar_end = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.toolbar_start.append(
-            button("view-refresh-symbolic", "Refresh route status", self._refresh)
+            button("devnet-refresh-symbolic", "Refresh route status", self._refresh)
         )
         self._spinner = Gtk.Spinner()
         self._spinner.set_visible(False)
@@ -80,7 +80,7 @@ class RoutesView(Gtk.Box):
     # -- toolbar ----------------------------------------------------------
     def _add_button(self) -> Gtk.MenuButton:
         menu = Gtk.MenuButton()
-        menu.set_icon_name("list-add-symbolic")
+        menu.set_icon_name("devnet-add-symbolic")
         menu.set_tooltip_text("Add a route")
         menu.add_css_class("flat")
         popover = Gtk.Popover()
@@ -182,19 +182,19 @@ class RoutesView(Gtk.Box):
             )
             suffix.append(partial)
         copy = button(
-            "edit-copy-symbolic",
+            "devnet-copy-symbolic",
             "Copy the equivalent ip route command",
             lambda r=route: self._copy_commands(r),
         )
         suffix.append(copy)
         if route.is_list:
             edit = button(
-                "view-refresh-symbolic",
+                "devnet-refresh-symbolic",
                 "Update the country ranges",
                 lambda r=route: self.store.add_country(r.country or ""),
             )
         else:
-            edit = button("dialog-information-symbolic", "Edit route", lambda i=index: self._edit(i))
+            edit = button("devnet-info-symbolic", "Edit route", lambda i=index: self._edit(i))
         suffix.append(edit)
         switch = Gtk.Switch()
         switch.set_active(self.store.active.get(route.id, False))

@@ -119,8 +119,13 @@ A native Linux port lives in [`linux/`](linux/README.md) — GTK4 + libadwaita, 
 scoped polkit helper. It ships as a `.deb` and an `.rpm` and supports Debian 12+, Ubuntu 22.10+,
 Fedora 37+ and RHEL 9 with EPEL. The macOS sources and installer are unchanged.
 
+Download **`devnet_1.3.0_all.deb`** or **`devnet-1.3.0-1.noarch.rpm`** from the
+[latest release](https://github.com/SajjadMohabati/DevNet/releases/latest), then:
+
 ```bash
-sudo ./linux/install.sh          # install from source
+sudo apt install ./devnet_1.3.0_all.deb          # Debian / Ubuntu
+sudo dnf install ./devnet-1.3.0-1.noarch.rpm     # Fedora / RHEL
+sudo ./linux/install.sh          # or install from source
 ./linux/run.sh                   # or run straight from the checkout
 ```
 

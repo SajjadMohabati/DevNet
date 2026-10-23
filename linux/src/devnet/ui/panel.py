@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Optional, Tuple
 
-from gi.repository import Gdk, GLib, Gtk
+from gi.repository import Gdk, GLib, Gtk, Pango
 
 from .. import app_info
 from ..dns import DNSStore
@@ -14,7 +14,7 @@ from ..processes import Container, DevProcess, ProcStore
 from ..routes import Route, RouteStore
 from ..speed import SpeedStore, format_speed
 from ..storage import Settings
-from .widgets import AppIcon, IPLine, Tile, label
+from .widgets import AppIcon, IPLine, StatusDot, Tile, label
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class PanelWindow(Gtk.Window):
         self.net = net
         self.speed = speed
 
-        self.set_default_size(362, -1)
+        self.set_default_size(330, -1)
         self.set_resizable(False)
         self.set_decorated(False)
         self.set_hide_on_close(True)
@@ -101,6 +101,8 @@ class PanelWindow(Gtk.Window):
         self._busy_spinner = Gtk.Spinner()
         self._busy_spinner.set_visible(False)
         header.append(self._busy_spinner)
+        self._status_dot = StatusDot(False)
+        header.append(self._status_dot)
         self._status_label = label("", "devn-caption", 1.0)
         header.append(self._status_label)
         body.append(header)
@@ -108,9 +110,9 @@ class PanelWindow(Gtk.Window):
         # IPs ------------------------------------------------------------
         ip_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
         ip_card.add_css_class("devn-ip-card")
-        self._local = IPLine("computer-symbolic", "Local")
-        self._isp = IPLine("network-wired-symbolic", "ISP")
-        self._iran = IPLine("network-transmit-receive-symbolic", "Iran")
+        self._local = IPLine("devnet-local-symbolic", "Local")
+        self._isp = IPLine("devnet-isp-symbolic", "ISP")
+        self._iran = IPLine("devnet-routes-symbolic", "Iran")
         for line in (self._local, self._isp, self._iran):
             ip_card.append(line)
         self._tunnel_rule = Gtk.Separator()
@@ -129,11 +131,28 @@ class PanelWindow(Gtk.Window):
         self._error.set_visible(False)
         body.append(self._error)
 
-        toggles = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self._routes_tile = Tile("network-transmit-receive-symbolic", "Routes", "0 of 0 on", self._toggle_routes)
+        self._show_routes = bool(self.settings.get("menu_show_routes", False))
+
+        self._toggles = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._routes_tile = Tile(
+            "devnet-routes-symbolic",
+            "Routes",
+            "0 of 0 on",
+            self._toggle_routes,
+        )
         self._routes_tile.set_hexpand(True)
-        toggles.append(self._routes_tile)
-        self._dns_tile = Tile("network-workgroup-symbolic", "DNS", "Automatic")
+
+        self._routes_chevron = Gtk.Button.new_from_icon_name(
+            "devnet-chevron-down-symbolic" if self._show_routes else "devnet-chevron-right-symbolic"
+        )
+        self._routes_chevron.add_css_class("flat")
+        self._routes_chevron.add_css_class("devn-tile-chevron")
+        self._routes_chevron.set_tooltip_text("Hide routes" if self._show_routes else "Show routes")
+        self._routes_chevron.connect("clicked", self._toggle_show_routes)
+        self._routes_tile.add_accessory(self._routes_chevron)
+        self._toggles.append(self._routes_tile)
+
+        self._dns_tile = Tile("devnet-dns-symbolic", "DNS", "Automatic")
         self._dns_tile.set_hexpand(True)
         self._dns_menu = Gtk.MenuButton()
         self._dns_menu.add_css_class("devn-menu-tile")
@@ -149,14 +168,24 @@ class PanelWindow(Gtk.Window):
         self._dns_popover.set_child(self._dns_popover_box)
         self._dns_popover.connect("show", self._build_dns_menu)
         self._dns_menu.set_popover(self._dns_popover)
-        toggles.append(self._dns_menu)
-        body.append(toggles)
+        self._toggles.append(self._dns_menu)
+        body.append(self._toggles)
 
+        self._routes_revealer = Gtk.Revealer()
+        self._routes_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self._routes_revealer.set_transition_duration(180)
+        self._routes_revealer.set_reveal_child(self._show_routes)
+
+        routes_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        routes_card.add_css_class("devn-routes-card")
         self._routes_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        body.append(self._routes_box)
+        routes_card.append(self._routes_box)
+        self._routes_revealer.set_child(routes_card)
+        body.append(self._routes_revealer)
 
         body.append(Gtk.Separator())
 
+        self._projects_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         projects_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         projects_header.append(label("Projects", "devn-row-subtitle"))
         spacer = Gtk.Box()
@@ -167,18 +196,20 @@ class PanelWindow(Gtk.Window):
         self._projects_link.add_css_class("devn-link")
         self._projects_link.connect("clicked", lambda _b: self._open("projects"))
         projects_header.append(self._projects_link)
-        body.append(projects_header)
+        self._projects_section.append(projects_header)
 
         self._projects_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        body.append(self._projects_box)
+        self._projects_section.append(self._projects_box)
+        body.append(self._projects_section)
 
         body.append(Gtk.Separator())
 
         footer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         open_button = Gtk.Button()
         open_button.add_css_class("flat")
+        open_button.add_css_class("devn-footer-button")
         open_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        open_content.append(Gtk.Image.new_from_icon_name("window-new-symbolic"))
+        open_content.append(Gtk.Image.new_from_icon_name("devnet-window-symbolic"))
         open_content.append(label("Open DevNet"))
         open_button.set_child(open_content)
         open_button.connect("clicked", lambda _b: self._open(None))
@@ -188,8 +219,9 @@ class PanelWindow(Gtk.Window):
         footer.append(spacer)
         quit_button = Gtk.Button()
         quit_button.add_css_class("flat")
+        quit_button.add_css_class("devn-footer-button")
         quit_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        quit_content.append(Gtk.Image.new_from_icon_name("application-exit-symbolic"))
+        quit_content.append(Gtk.Image.new_from_icon_name("devnet-quit-symbolic"))
         quit_content.append(label("Quit"))
         quit_button.set_child(quit_content)
         quit_button.connect("clicked", lambda _b: self.app.quit())
@@ -199,22 +231,24 @@ class PanelWindow(Gtk.Window):
         credits = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         credits.set_halign(Gtk.Align.CENTER)
         credits.append(
-            label(f"{app_info.APP_NAME} {app_info.VERSION} · Created by", "devn-caption", 0.5)
+            label(f"{app_info.APP_NAME} {app_info.VERSION} · Created by", "devn-credit", 0.5)
         )
         link = Gtk.LinkButton.new_with_label(app_info.REPO, app_info.AUTHOR)
-        link.add_css_class("devn-link")
+        link.add_css_class("flat")
+        link.add_css_class("devn-credit-link")
         credits.append(link)
         body.append(credits)
         return outer
 
     def _build_speed(self) -> Gtk.Box:
-        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         row.add_css_class("devn-speed-compact")
         row.set_valign(Gtk.Align.CENTER)
 
         badge = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         badge.add_css_class("devn-ping-badge")
         badge.set_valign(Gtk.Align.CENTER)
+        self._ping_badge = badge
         self._ping = label("—", "devn-ping-value", 0.5)
         self._ping.set_halign(Gtk.Align.CENTER)
         badge.append(self._ping)
@@ -226,26 +260,37 @@ class PanelWindow(Gtk.Window):
         texts = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         texts.set_hexpand(True)
         texts.set_valign(Gtk.Align.CENTER)
-        rates = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        rates = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self._down = label("0 B/s", "devn-mono blue")
         self._up = label("0 B/s", "devn-mono orange")
-        rates.append(Gtk.Image.new_from_icon_name("go-down-symbolic"))
+        # Rates must never be cut to "7 k…": keep them at their natural width.
+        for rate in (self._down, self._up):
+            rate.set_ellipsize(Pango.EllipsizeMode.NONE)
+            rate.set_width_chars(0)
+        rates.append(Gtk.Image.new_from_icon_name("devnet-down-symbolic"))
         rates.append(self._down)
-        rates.append(Gtk.Image.new_from_icon_name("go-up-symbolic"))
+        rates.append(Gtk.Image.new_from_icon_name("devnet-up-symbolic"))
         rates.append(self._up)
         texts.append(rates)
         self._speed_host = label("Cloudflare", "devn-caption")
         texts.append(self._speed_host)
         row.append(texts)
 
-        self._speed_button = Gtk.Button.new_from_icon_name("media-playback-start-symbolic")
-        self._speed_button.add_css_class("flat")
+        # Like the Mac: tapping the row starts/stops the test; a red stop button shows only while it runs.
+        self._speed_button = Gtk.Button.new_from_icon_name("devnet-stop-symbolic")
+        self._speed_button.add_css_class("devn-stop-button-running")
         self._speed_button.set_valign(Gtk.Align.CENTER)
+        self._speed_button.set_tooltip_text("Stop the speed test")
+        self._speed_button.set_visible(False)
         self._speed_button.connect("clicked", self._toggle_speed)
         row.append(self._speed_button)
+        row.set_tooltip_text("Run a speed test")
+        tap = Gtk.GestureClick()
+        tap.connect("released", lambda g, *_: self._toggle_speed(None))
+        row.add_controller(tap)
 
-        open_button = Gtk.Button.new_from_icon_name("go-next-symbolic")
-        open_button.add_css_class("flat")
+        open_button = Gtk.Button.new_from_icon_name("devnet-chevron-right-symbolic")
+        open_button.add_css_class("devn-speed-chevron")
         open_button.set_valign(Gtk.Align.CENTER)
         open_button.set_tooltip_text("Open the full speed test")
         open_button.connect("clicked", lambda _b: self._open("speed"))
@@ -279,10 +324,19 @@ class PanelWindow(Gtk.Window):
         busy = self.routes.busy
         self._busy_spinner.set_visible(busy)
         if busy:
+            self._status_dot.set_visible(False)
             self._busy_spinner.start()
             self._status_label.set_text("Applying…")
+            self._toggles.set_sensitive(False)
+            self._routes_revealer.set_sensitive(False)
+            self._projects_section.set_sensitive(False)
             return
         self._busy_spinner.stop()
+        self._status_dot.set_visible(True)
+        self._status_dot.set_state(self.net.vpn)
+        self._toggles.set_sensitive(True)
+        self._routes_revealer.set_sensitive(True)
+        self._projects_section.set_sensitive(True)
         if self.net.vpn:
             count = len(self.net.tunnels)
             self._status_label.set_text(f"{count} VPNs on" if count > 1 else "VPN on")
@@ -305,7 +359,7 @@ class PanelWindow(Gtk.Window):
         for tunnel in self.net.tunnels:
             default = tunnel.iface == self.net.default_iface
             line = IPLine(
-                "channel-secure-symbolic",
+                "devnet-tunnel-default-symbolic" if default else "devnet-tunnel-symbolic",
                 tunnel.name,
                 tunnel.public_ip,
                 tunnel.iface + (" · default" if default else ""),
@@ -325,17 +379,17 @@ class PanelWindow(Gtk.Window):
     def _sync_speed(self) -> None:
         store = self.speed
         self._ping.set_text("—" if store.live_ping is None else str(store.live_ping))
+        css = self._ping_css()
         for name in ("green", "yellow", "red"):
             self._ping.remove_css_class(name)
-        for name in self._ping_css().split()[1:]:
+            self._ping_badge.remove_css_class(name)
+        for name in css.split()[1:]:
             self._ping.add_css_class(name)
+            self._ping_badge.add_css_class(name)
         self._down.set_text("…" if store.running else format_speed(store.activity_down, store.use_bytes))
         self._up.set_text("…" if store.running else format_speed(store.activity_up, store.use_bytes))
         self._speed_host.set_text(store.live_host_name or "Cloudflare")
-        self._speed_button.set_icon_name(
-            "media-playback-stop-symbolic" if store.running else "media-playback-start-symbolic"
-        )
-        self._speed_button.set_tooltip_text("Stop the speed test" if store.running else "Run a speed test")
+        self._speed_button.set_visible(store.running)
         self._speed_progress.set_visible(store.running)
         self._speed_progress.set_fraction(store.progress)
 
@@ -345,6 +399,17 @@ class PanelWindow(Gtk.Window):
         self._error.set_visible(bool(message))
 
     # -- routes -----------------------------------------------------------
+    def _toggle_show_routes(self, _button: Optional[Gtk.Button] = None) -> None:
+        self._show_routes = not self._show_routes
+        self.settings.set("menu_show_routes", self._show_routes)
+        self._routes_revealer.set_reveal_child(self._show_routes)
+        self._routes_chevron.set_icon_name(
+            "devnet-chevron-down-symbolic" if self._show_routes else "devnet-chevron-right-symbolic"
+        )
+        self._routes_chevron.set_tooltip_text(
+            "Hide routes" if self._show_routes else "Show routes"
+        )
+
     def _sync_routes(self) -> None:
         routes = self.routes.config.routes
         active = self.routes.active_count
@@ -372,9 +437,12 @@ class PanelWindow(Gtk.Window):
         self._route_signature = signature
         _clear(self._routes_box)
         if not routes:
-            self._routes_box.append(label("No routes yet.", "devn-row-subtitle"))
+            empty = label("No routes yet.", "devn-row-subtitle")
+            empty.set_margin_top(6)
+            empty.set_margin_bottom(6)
+            empty.set_margin_start(10)
+            self._routes_box.append(empty)
             return
-        self._routes_box.append(Gtk.Separator())
         for route in routes:
             self._routes_box.append(self._route_row(route))
 
@@ -383,11 +451,11 @@ class PanelWindow(Gtk.Window):
         row.add_css_class("devn-route-mini")
         row.set_valign(Gtk.Align.CENTER)
         if route.is_list:
-            icon = "starred-symbolic"
+            icon = "devnet-flag-symbolic"
         elif route.is_domain:
-            icon = "network-workgroup-symbolic"
+            icon = "devnet-domain-symbolic"
         else:
-            icon = "network-transmit-receive-symbolic"
+            icon = "devnet-network-symbolic"
         image = Gtk.Image.new_from_icon_name(icon)
         image.set_pixel_size(12)
         image.add_css_class("dim-label")
@@ -427,7 +495,7 @@ class PanelWindow(Gtk.Window):
             widget.set_halign(Gtk.Align.FILL)
             content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             icon = Gtk.Image.new_from_icon_name(
-                "object-select-symbolic" if active else "network-workgroup-symbolic"
+                "devnet-check-symbolic" if active else "devnet-dns-symbolic"
             )
             icon.set_opacity(1.0 if active else 0.3)
             content.append(icon)
@@ -499,8 +567,9 @@ class PanelWindow(Gtk.Window):
             link.add_css_class("flat")
             link.add_css_class("devn-link")
             row.append(link)
-        stop = Gtk.Button.new_from_icon_name("window-close-symbolic")
+        stop = Gtk.Button.new_from_icon_name("devnet-close-symbolic")
         stop.add_css_class("flat")
+        stop.add_css_class("devn-stop-btn")
         stop.set_tooltip_text("Stop")
         stop.connect("clicked", lambda _b, p=process: self.procs.stop(p))
         row.append(stop)
@@ -514,8 +583,9 @@ class PanelWindow(Gtk.Window):
             link.add_css_class("flat")
             link.add_css_class("devn-link")
             row.append(link)
-        stop = Gtk.Button.new_from_icon_name("window-close-symbolic")
+        stop = Gtk.Button.new_from_icon_name("devnet-close-symbolic")
         stop.add_css_class("flat")
+        stop.add_css_class("devn-stop-btn")
         stop.set_tooltip_text("Stop")
         stop.connect("clicked", lambda _b, c=container: self.procs.stop_container(c))
         row.append(stop)

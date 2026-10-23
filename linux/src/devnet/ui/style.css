@@ -1,5 +1,12 @@
 /* DevNet for Linux — a quiet, native-looking layer on top of Adwaita. */
 
+/* Inter is the closest open font to the Mac's SF Pro; fall back to the desktop font. */
+.devn-window,
+.devn-panel-window {
+  font-family: "Inter", "Inter Variable", "SF Pro Text", "Cantarell", "Adwaita Sans", sans-serif;
+  font-feature-settings: "cv11", "ss03";
+}
+
 .devn-window {
   background-color: @window_bg_color;
 }
@@ -26,26 +33,33 @@
 
 .devn-nav {
   padding: 2px 0;
+  background: transparent;
 }
 
-.devn-nav button {
+.devn-nav > row {
   border-radius: 10px;
   padding: 7px 9px;
   min-height: 30px;
+  margin-bottom: 2px;
   background: transparent;
-  border: none;
-  box-shadow: none;
+  outline: none;
 }
 
-.devn-nav button:hover {
+.devn-nav > row:focus:not(:hover):not(:selected),
+.devn-nav > row:active:not(:selected) {
+  background-color: transparent;
+}
+
+.devn-nav > row:hover {
   background-color: alpha(@window_fg_color, 0.06);
 }
 
-.devn-nav button:checked {
+.devn-nav > row:selected {
   background-color: alpha(@accent_bg_color, 0.15);
+  color: @window_fg_color;
 }
 
-.devn-nav button:checked label {
+.devn-nav > row:selected label {
   font-weight: 700;
 }
 
@@ -63,7 +77,7 @@
   color: alpha(@window_fg_color, 0.7);
 }
 
-.devn-nav button:checked .devn-nav-badge {
+.devn-nav > row:selected .devn-nav-badge {
   background-color: alpha(@accent_bg_color, 0.22);
   color: @accent_color;
 }
@@ -77,6 +91,14 @@
   font-size: 11px;
 }
 
+.devn-app-icon image,
+image.devn-app-glyph,
+.devn-nav > row .devn-app-icon image.devn-app-glyph,
+.devn-nav > row:selected .devn-app-icon image.devn-app-glyph {
+  color: white;
+  -gtk-icon-style: symbolic;
+}
+
 .devn-app-icon.small {
   min-width: 20px;
   min-height: 20px;
@@ -84,16 +106,16 @@
   font-size: 9px;
 }
 
-.devn-app-icon.blue { background-image: linear-gradient(180deg, #5da7ff, #1c71d8); }
-.devn-app-icon.green { background-image: linear-gradient(180deg, #6fe08a, #26a269); }
-.devn-app-icon.indigo { background-image: linear-gradient(180deg, #8b9bff, #5147cf); }
-.devn-app-icon.orange { background-image: linear-gradient(180deg, #ffbe5c, #e66100); }
-.devn-app-icon.pink { background-image: linear-gradient(180deg, #ff94c6, #c01c86); }
-.devn-app-icon.teal { background-image: linear-gradient(180deg, #6ee7d8, #008a83); }
-.devn-app-icon.red { background-image: linear-gradient(180deg, #ff8b8b, #c01c28); }
-.devn-app-icon.purple { background-image: linear-gradient(180deg, #c79bff, #813d9c); }
-.devn-app-icon.cyan { background-image: linear-gradient(180deg, #7de3f4, #007e9c); }
-.devn-app-icon.gray { background-image: linear-gradient(180deg, #b9b9b9, #77767b); }
+.devn-app-icon.blue { background-image: linear-gradient(180deg, #3395ff, #007aff); }
+.devn-app-icon.green { background-image: linear-gradient(180deg, #5cd27a, #34c759); }
+.devn-app-icon.indigo { background-image: linear-gradient(180deg, #7a78e0, #5856d6); }
+.devn-app-icon.orange { background-image: linear-gradient(180deg, #ffaa33, #ff9500); }
+.devn-app-icon.pink { background-image: linear-gradient(180deg, #ff5777, #ff2d55); }
+.devn-app-icon.teal { background-image: linear-gradient(180deg, #59c0d2, #30b0c7); }
+.devn-app-icon.red { background-image: linear-gradient(180deg, #ff6259, #ff3b30); }
+.devn-app-icon.purple { background-image: linear-gradient(180deg, #bf75e5, #af52de); }
+.devn-app-icon.cyan { background-image: linear-gradient(180deg, #5bbdeb, #32ade6); }
+.devn-app-icon.gray { background-image: linear-gradient(180deg, #a5a5aa, #8e8e93); }
 
 .devn-section-label {
   font-size: 10px;
@@ -140,9 +162,9 @@
   color: alpha(@window_fg_color, 0.55);
 }
 
+/* The Mac uses .monospacedDigit(): the normal font with fixed-width digits, not a code font. */
 .devn-mono {
-  font-family: "Adwaita Mono", "JetBrains Mono", "SF Mono", monospace;
-  font-feature-settings: "tnum";
+  font-feature-settings: "tnum", "cv11", "ss03";
 }
 
 .devn-stat-value {
@@ -200,29 +222,32 @@
 .devn-tile {
   background-color: alpha(@window_fg_color, 0.055);
   border-radius: 12px;
-  padding: 8px;
+  padding: 6px 8px;
+  transition: background-color 140ms ease;
 }
 
-.devn-tile.on {
-  background-color: alpha(@accent_bg_color, 0.14);
+.devn-tile:hover {
+  background-color: alpha(@window_fg_color, 0.09);
 }
+
+/* Like the Mac tiles: the tile itself stays neutral, only its icon circle turns accent when on. */
 
 .devn-tile-title {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .devn-tile-subtitle {
-  font-size: 10px;
+  font-size: 10.5px;
   color: alpha(@window_fg_color, 0.6);
 }
 
 .devn-tile-icon {
-  min-width: 28px;
-  min-height: 28px;
+  min-width: 26px;
+  min-height: 26px;
   border-radius: 99px;
   color: @window_fg_color;
-  background-color: alpha(@window_fg_color, 0.09);
+  background-color: alpha(@window_fg_color, 0.12);
 }
 
 .devn-tile.on .devn-tile-icon {
@@ -230,14 +255,37 @@
   background-color: @accent_bg_color;
 }
 
+.devn-tile-chevron {
+  min-width: 18px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: alpha(@window_fg_color, 0.5);
+}
+
+.devn-tile-chevron:hover {
+  background-color: alpha(@window_fg_color, 0.08);
+  color: @window_fg_color;
+}
+
+.devn-routes-card {
+  background-color: alpha(@window_fg_color, 0.04);
+  border-radius: 12px;
+  padding: 4px 0;
+}
+
 .devn-panel {
   background-color: @popover_bg_color;
-  border-radius: 16px;
-  border: 1px solid alpha(@window_fg_color, 0.12);
+  border-radius: 14px;
+  border: 1px solid alpha(@window_fg_color, 0.10);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
 .devn-panel-body {
-  padding: 12px;
+  padding: 10px;
 }
 
 .devn-panel-header {
@@ -246,8 +294,8 @@
 }
 
 .devn-status-dot {
-  min-width: 7px;
-  min-height: 7px;
+  min-width: 6px;
+  min-height: 6px;
   border-radius: 99px;
   background-color: alpha(@window_fg_color, 0.4);
 }
@@ -257,7 +305,7 @@
 }
 
 .devn-status-dot.off {
-  background-color: #e01b24;
+  background-color: alpha(@window_fg_color, 0.4);
 }
 
 .devn-error {
@@ -280,6 +328,10 @@
 
 .devn-route-mini label {
   font-size: 11.5px;
+}
+
+.devn-route-mini switch {
+  margin: 0;
 }
 
 .devn-chart {
@@ -346,8 +398,20 @@
 }
 
 .devn-progress {
-  min-height: 3px;
+  min-height: 2px;
   border-radius: 99px;
+  padding: 0;
+  margin: 0;
+}
+
+.devn-progress progress {
+  border-radius: 99px;
+  background-color: @accent_bg_color;
+}
+
+.devn-progress trough {
+  background-color: transparent;
+  min-height: 2px;
 }
 
 .devn-chip {
@@ -400,19 +464,39 @@
   padding: 7px 10px;
   border-radius: 12px;
   background-color: alpha(@window_fg_color, 0.055);
+  transition: background-color 140ms ease;
+}
+
+.devn-speed-compact:hover {
+  background-color: alpha(@window_fg_color, 0.09);
 }
 
 .devn-ping-badge {
-  min-width: 42px;
+  min-width: 40px;
+  min-height: 34px;
   padding: 2px 4px;
   border-radius: 9px;
   background-color: alpha(@window_fg_color, 0.06);
+  transition: background-color 180ms ease;
+}
+
+.devn-ping-badge.green {
+  background-color: alpha(#2ec27e, 0.14);
+}
+
+.devn-ping-badge.yellow {
+  background-color: alpha(#e5a50a, 0.14);
+}
+
+.devn-ping-badge.red {
+  background-color: alpha(#e01b24, 0.14);
 }
 
 .devn-ping-value {
   font-size: 17px;
   font-weight: 700;
   font-feature-settings: "tnum";
+  line-height: 1.0;
 }
 
 .devn-ping-value.green { color: #2ec27e; }
@@ -430,4 +514,101 @@
   background: transparent;
 }
 
+.devn-stop-button-running {
+  background-color: #e01b24;
+  color: white;
+  border-radius: 99px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 2px;
+}
 
+.devn-speed-chevron {
+  min-width: 16px;
+  min-height: 34px;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  color: alpha(@window_fg_color, 0.5);
+}
+
+.devn-speed-chevron:hover {
+  background: none;
+  color: @window_fg_color;
+}
+
+.devn-stop-button-running:hover {
+  background-color: #c01c28;
+}
+
+.devn-stop-btn {
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  border-radius: 99px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: alpha(@window_fg_color, 0.45);
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.devn-stop-btn:hover {
+  color: #e01b24;
+  background-color: alpha(#e01b24, 0.12);
+}
+
+/* Panel footer and credit line: quiet, secondary text like the Mac panel. */
+.devn-footer-button {
+  padding: 2px 4px;
+  min-height: 24px;
+  color: alpha(@window_fg_color, 0.62);
+}
+
+.devn-footer-button label {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.devn-footer-button:hover {
+  color: @window_fg_color;
+}
+
+.devn-credit {
+  font-size: 10px;
+  color: alpha(@window_fg_color, 0.4);
+}
+
+.devn-credit-link,
+.devn-credit-link:hover,
+.devn-credit-link:visited {
+  padding: 0;
+  min-height: 0;
+  font-size: 10px;
+  color: alpha(@window_fg_color, 0.62);
+  background: transparent;
+  box-shadow: none;
+}
+
+.devn-credit-link label {
+  text-decoration: none;
+}
+
+/* The DNS tile is a MenuButton: hide its inner button chrome so it looks like the Routes tile. */
+.devn-menu-tile > button {
+  padding: 0;
+  min-height: 0;
+  border-radius: 12px;
+  background-color: alpha(@window_fg_color, 0.055);
+  box-shadow: none;
+  border: none;
+}
+
+.devn-menu-tile > button:hover,
+.devn-menu-tile > button:checked {
+  background-color: alpha(@window_fg_color, 0.09);
+}
+
+.devn-menu-tile > button .devn-tile {
+  background: transparent;
+}

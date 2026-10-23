@@ -26,13 +26,13 @@ class DNSView(Gtk.Box):
         self._test_spinner.set_visible(False)
         self.toolbar_end.append(self._test_spinner)
         self.toolbar_end.append(
-            button("network-transmit-receive-symbolic", "Test DNS latency", self._test)
+            button("devnet-speed-symbolic", "Test DNS latency", self._test)
         )
         self._flush_button = button(
-            "view-refresh-symbolic", "Flush DNS cache", self.store.flush_cache
+            "devnet-refresh-symbolic", "Flush DNS cache", self.store.flush_cache
         )
         self.toolbar_end.append(self._flush_button)
-        self.toolbar_end.append(button("list-add-symbolic", "Add DNS preset", lambda: self._edit(None)))
+        self.toolbar_end.append(button("devnet-add-symbolic", "Add DNS preset", lambda: self._edit(None)))
 
         self._page = page()
         self._page.set_vexpand(True)
@@ -77,7 +77,7 @@ class DNSView(Gtk.Box):
             else:
                 self._test_spinner.stop()
             self._flush_button.set_icon_name(
-                "object-select-symbolic" if self.store.flushed else "view-refresh-symbolic"
+                "devnet-check-symbolic" if self.store.flushed else "devnet-refresh-symbolic"
             )
         finally:
             self._updating = False
@@ -114,7 +114,7 @@ class DNSView(Gtk.Box):
 
         if self.store.vpn_controls_dns and not self.store.helper_installed:
             warning = Adw.ActionRow()
-            warning.add_prefix(Gtk.Image.new_from_icon_name("dialog-warning-symbolic"))
+            warning.add_prefix(Gtk.Image.new_from_icon_name("devnet-warning-symbolic"))
             warning.set_title("Your VPN sets its own DNS")
             warning.set_subtitle(
                 "Enable passwordless mode in the sidebar so presets can override it."
@@ -157,7 +157,7 @@ class DNSView(Gtk.Box):
                         "devn-success" if value < 60 else "devn-warning" if value < 150 else "devn-error"
                     )
                 suffix.append(label(text, "devn-mono " + css))
-            suffix.append(button("dialog-information-symbolic", "Edit preset", lambda i=index: self._edit(i)))
+            suffix.append(button("devnet-info-symbolic", "Edit preset", lambda i=index: self._edit(i)))
             switch = Gtk.Switch()
             switch.set_active(self.store.is_active(preset))
             switch.set_valign(Gtk.Align.CENTER)

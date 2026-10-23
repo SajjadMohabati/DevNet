@@ -89,7 +89,7 @@ class DevNetApplication(Adw.Application):
         )
 
     def _load_icons(self) -> None:
-        """Make the bundled icon work when running from a source checkout."""
+        """Bundled app icon and the DevNet symbolic icon set (resources/devnet-*-symbolic.svg)."""
         display = Gdk.Display.get_default()
         if display is None:
             return
@@ -128,6 +128,7 @@ class DevNetApplication(Adw.Application):
             self.routes.subscribe(self._tray_refresh),
             self.speed.subscribe(self._tray_refresh),
             self.dns.subscribe(self._tray_refresh),
+            self.net.subscribe(self._tray_refresh),
         ]
         self._tray_subscriptions = callbacks
 
@@ -142,21 +143,40 @@ class DevNetApplication(Adw.Application):
             return
         if self.routes is not None:
             self.tray.set_active(self.routes.active_count > 0)
+        # Stores notify often (speed/network ticks); only tell the panel host to re-read the
+        # menu when something it shows actually changed.
+        state = repr(self._menu_state())
+        if state == getattr(self, "_last_menu_state", None):
+            return
+        self._last_menu_state = state
         self.tray.refresh_menu()
 
     def _menu_state(self) -> dict:
-        assert self.routes and self.dns
+        assert self.routes and self.dns and self.net and self.speed
+        from .speed import format_speed
+
         routes = [
             (route.id, route.net, bool(route.enabled), self.routes.is_partial(route))
             for route in self.routes.config.routes
         ]
         presets = [(preset.name, preset.servers, self.dns.is_active(preset)) for preset in self.dns.presets]
         active = self.dns.active_preset
+        tunnels = [(t.name, t.iface, t.public_ip) for t in self.net.tunnels]
         return {
             "routes": routes,
             "all_on": self.routes.all_on,
             "dns": presets,
             "dns_active": active.name if active is not None else "",
+            "vpn": self.net.vpn,
+            "vpn_count": len(self.net.tunnels),
+            "local_ip": self.net.local_ip,
+            "direct_ip": self.net.direct_ip,
+            "routed_ip": self.net.routed_ip,
+            "tunnels": tunnels,
+            "speed_down": format_speed(self.speed.activity_down, self.speed.use_bytes),
+            "speed_up": format_speed(self.speed.activity_up, self.speed.use_bytes),
+            "ping": self.speed.live_ping,
+            "live_host": self.speed.live_host_name,
         }
 
     def _tray_routes(self, enabled: bool) -> None:

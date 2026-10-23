@@ -5,8 +5,8 @@ Priority: optional
 Architecture: all
 Maintainer: Sajjad Mohabati <sajjadmohabati@users.noreply.github.com>
 Installed-Size: @SIZE@
-Depends: python3:any (>= 3.9), python3-gi, python3-gi-cairo, gir1.2-gtk-4.0, gir1.2-adw-1, iproute2, iputils-ping, pkexec | policykit-1, libglib2.0-bin, desktop-file-utils, gtk-update-icon-cache, hicolor-icon-theme
-Recommends: network-manager, systemd-resolved, iso-codes, gnome-shell-extension-appindicator
+Depends: python3:any (>= 3.9), python3-gi, python3-gi-cairo, gir1.2-gtk-4.0, gir1.2-adw-1, librsvg2-common, iproute2, iputils-ping, pkexec | policykit-1, libglib2.0-bin, desktop-file-utils, gtk-update-icon-cache, hicolor-icon-theme
+Recommends: fonts-inter, network-manager, systemd-resolved, iso-codes, gnome-shell-extension-appindicator
 Homepage: https://github.com/SajjadMohabati/DevNet
 Description: Split tunneling, DNS switching and local dev servers
  DevNet keeps selected networks, hosts, domains and country IP ranges on

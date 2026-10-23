@@ -51,6 +51,7 @@ ITEM_XML = """
     <property name="Status" type="s" access="read"/>
     <property name="WindowId" type="i" access="read"/>
     <property name="IconName" type="s" access="read"/>
+    <property name="IconThemePath" type="s" access="read"/>
     <property name="IconPixmap" type="a(iiay)" access="read"/>
     <property name="OverlayIconName" type="s" access="read"/>
     <property name="OverlayIconPixmap" type="a(iiay)" access="read"/>
@@ -322,25 +323,27 @@ class TrayIcon:
     def _register_with_watcher(self) -> None:
         if self.connection is None:
             return
-        try:
-            result = self.connection.call_sync(
-                WATCHER,
-                WATCHER_PATH,
-                WATCHER,
-                "RegisterStatusNotifierItem",
-                GLib.Variant("(s)", (self.service,)),
-                None,
-                Gio.DBusCallFlags.NONE,
-                1200,
-                None,
-            )
-            self._registered = result is not None
-            if self._registered:
-                log.info("registered tray icon with %s", WATCHER)
-        except GLib.Error as exc:
-            self._registered = False
-            log.debug("status notifier watcher unavailable: %s", exc)
-            self._schedule_registration()
+        for target in (ITEM_PATH, self.service):
+            try:
+                result = self.connection.call_sync(
+                    WATCHER,
+                    WATCHER_PATH,
+                    WATCHER,
+                    "RegisterStatusNotifierItem",
+                    GLib.Variant("(s)", (target,)),
+                    None,
+                    Gio.DBusCallFlags.NONE,
+                    1200,
+                    None,
+                )
+                self._registered = result is not None
+                if self._registered:
+                    log.info("registered tray icon with %s using %s", WATCHER, target)
+                    return
+            except GLib.Error as exc:
+                self._registered = False
+                log.debug("status notifier watcher registration with %s failed: %s", target, exc)
+        self._schedule_registration()
 
     # -- StatusNotifierItem ----------------------------------------------
     def _item_call(self, _conn, _sender, _path, _iface, method, params, invocation) -> None:
@@ -372,6 +375,10 @@ class TrayIcon:
             return GLib.Variant("i", 0)
         if name == "IconName":
             return GLib.Variant("s", self._icon_name)
+        if name == "IconThemePath":
+            from pathlib import Path
+            res = str(Path(__file__).resolve().parent / "resources")
+            return GLib.Variant("s", res)
         if name == "ItemIsMenu":
             return GLib.Variant("b", False)
         if name == "Menu":
@@ -388,45 +395,89 @@ class TrayIcon:
     def _build_menu(self) -> MenuItem:
         state = self.menu_state() if self.menu_state else {}
         root = MenuItem(0, kind="submenu")
-        root.children.append(MenuItem(1, "Open DevNet", action=self.on_open))
-        root.children.append(MenuItem(2, "Toggle Panel", action=self.on_activate))
 
+        # 1. Live status
+        vpn_on = state.get("vpn", False)
+        vpn_count = state.get("vpn_count", 0)
+        status_text = f"{vpn_count} VPNs on" if vpn_count > 1 else ("VPN on" if vpn_on else "No VPN")
+        root.children.append(MenuItem(1, f"DevNet  •  {status_text}", enabled=False))
+        root.children.append(MenuItem(2, kind="separator"))
+
+        # 2. IP Addresses (click to copy)
+        from .shell import clipboard_text
+
+        local_ip = state.get("local_ip", "")
+        if local_ip:
+            root.children.append(MenuItem(10, f"Local IP:  {local_ip}", action=lambda v=local_ip: clipboard_text(v)))
+        direct_ip = state.get("direct_ip", "")
+        if direct_ip:
+            root.children.append(MenuItem(11, f"ISP IP:    {direct_ip}", action=lambda v=direct_ip: clipboard_text(v)))
+        routed_ip = state.get("routed_ip", "")
+        if routed_ip:
+            root.children.append(MenuItem(12, f"Iran IP:   {routed_ip}", action=lambda v=routed_ip: clipboard_text(v)))
+        for idx, (tname, tiface, tip) in enumerate(state.get("tunnels", [])):
+            if tip:
+                root.children.append(MenuItem(20 + idx, f"{tname}:  {tip}", action=lambda v=tip: clipboard_text(v)))
+
+        if local_ip or direct_ip or routed_ip:
+            root.children.append(MenuItem(29, kind="separator"))
+
+        # 3. Live Speed and Latency
+        ping = state.get("ping")
+        ping_str = f"{ping} ms" if ping is not None else "—"
+        host_str = state.get("live_host", "Cloudflare")
+        down_str = state.get("speed_down", "0 B/s")
+        up_str = state.get("speed_up", "0 B/s")
+        if down_str != "0 B/s" or up_str != "0 B/s" or ping is not None:
+            root.children.append(MenuItem(30, f"↓ {down_str}  ↑ {up_str}  ·  {ping_str} ({host_str})", enabled=False))
+            root.children.append(MenuItem(31, kind="separator"))
+
+        # 4. Routes Submenu
         routes = state.get("routes", [])
-        routes_item = MenuItem(3, "Routes", kind="submenu")
+        active_routes_count = sum(1 for _, _, enabled, _ in routes if enabled)
+        routes_title = f"Routes ({active_routes_count} of {len(routes)} on)"
+        routes_item = MenuItem(40, routes_title, kind="submenu")
         routes_item.children.append(
             MenuItem(
-                31,
+                41,
                 "All Routes",
                 action=lambda: self.on_routes(not state.get("all_on", False)),
                 toggle=bool(state.get("all_on", False)),
             )
         )
-        routes_item.children.append(MenuItem(32, kind="separator"))
+        routes_item.children.append(MenuItem(42, kind="separator"))
         if routes:
             for index, (route_id, label, enabled, partial) in enumerate(routes):
                 text = label + ("  (partial)" if partial else "")
                 routes_item.children.append(
                     MenuItem(
-                        300 + index,
+                        400 + index,
                         text,
                         action=lambda rid=route_id, on=not enabled: self.on_route(rid, on),
                         toggle=bool(enabled),
                     )
                 )
         else:
-            routes_item.children.append(MenuItem(33, "No routes yet", enabled=False))
+            routes_item.children.append(MenuItem(43, "No routes yet", enabled=False))
         root.children.append(routes_item)
 
-        dns_item = MenuItem(4, "DNS", kind="submenu")
+        # 5. DNS Submenu
+        dns_active = state.get("dns_active", "")
+        dns_title = f"DNS ({dns_active})" if dns_active else "DNS (Automatic)"
+        dns_item = MenuItem(50, dns_title, kind="submenu")
         dns_item.children.append(
-            MenuItem(40, "Automatic (DHCP)", action=lambda: self.on_dns([]),
-                     toggle=not state.get("dns_active", ""))
+            MenuItem(
+                51,
+                "Automatic (DHCP)",
+                action=lambda: self.on_dns([]),
+                toggle=not bool(dns_active),
+            )
         )
-        dns_item.children.append(MenuItem(41, kind="separator"))
+        dns_item.children.append(MenuItem(52, kind="separator"))
         for index, (name, servers, active) in enumerate(state.get("dns", [])):
             dns_item.children.append(
                 MenuItem(
-                    400 + index,
+                    500 + index,
                     name,
                     action=lambda values=list(servers): self.on_dns(values),
                     toggle=bool(active),
@@ -434,9 +485,13 @@ class TrayIcon:
             )
         root.children.append(dns_item)
 
-        root.children.append(MenuItem(5, "Run Speed Test", action=self.on_speed))
-        root.children.append(MenuItem(6, kind="separator"))
-        root.children.append(MenuItem(7, "Quit DevNet", action=self.on_quit))
+        # 6. Actions
+        root.children.append(MenuItem(60, "Run Speed Test", action=self.on_speed))
+        root.children.append(MenuItem(61, kind="separator"))
+        root.children.append(MenuItem(70, "Open DevNet", action=self.on_open))
+        root.children.append(MenuItem(71, "Toggle Panel", action=self.on_activate))
+        root.children.append(MenuItem(72, kind="separator"))
+        root.children.append(MenuItem(80, "Quit DevNet", action=self.on_quit))
         return root
 
     def _menu_call(self, _conn, _sender, _path, _iface, method, params, invocation) -> None:

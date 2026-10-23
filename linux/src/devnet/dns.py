@@ -18,7 +18,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
-from gi.repository import GLib
+try:
+    from gi.repository import GLib
+except (ImportError, ModuleNotFoundError):
+    GLib = None  # type: ignore
 
 from . import privilege
 from .ipv4 import ip_string, parse_ip
@@ -198,7 +201,8 @@ class DNSStore:
         self._listeners: List[Callable[[], None]] = []
 
         self.refresh()
-        GLib.timeout_add_seconds(20, self._maintenance_tick)
+        if GLib is not None:
+            GLib.timeout_add_seconds(20, self._maintenance_tick)
 
     # ------------------------------------------------------------------ events
 
@@ -379,7 +383,10 @@ class DNSStore:
                     )
                     self.notify()
 
-            GLib.timeout_add(1200, lambda: (verify(), False)[1])
+            if GLib is not None:
+                GLib.timeout_add(1200, lambda: (verify(), False)[1])
+            else:
+                verify()
 
     def flush_cache(self) -> None:
         background(self._flush_worker)
@@ -395,7 +402,8 @@ class DNSStore:
             return
         self.flushed = True
         self.notify()
-        GLib.timeout_add(2000, self._reset_flushed)
+        if GLib is not None:
+            GLib.timeout_add(2000, self._reset_flushed)
 
     def _reset_flushed(self) -> bool:
         self.flushed = False

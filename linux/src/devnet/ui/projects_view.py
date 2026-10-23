@@ -25,9 +25,9 @@ class ProjectsView(Gtk.Box):
         self.toolbar_start = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.toolbar_end = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
         self.toolbar_start.append(self._filter_button())
-        self.toolbar_start.append(button("view-refresh-symbolic", "Refresh", self.store.refresh))
+        self.toolbar_start.append(button("devnet-refresh-symbolic", "Refresh", self.store.refresh))
         self.toolbar_end.append(
-            button("process-stop-symbolic", "Stop all processes", self.store.stop_all)
+            button("devnet-close-symbolic", "Stop all processes", self.store.stop_all)
         )
 
         self._stack = Gtk.Stack()
@@ -37,7 +37,7 @@ class ProjectsView(Gtk.Box):
         status = Adw.StatusPage()
         status.set_title("No Running Projects")
         status.set_description("Dev servers listening on a port will appear here.")
-        status.set_icon_name("applications-engineering-symbolic")
+        status.set_icon_name("devnet-projects-symbolic")
         self._stack.add_named(status, "empty")
 
         self._page = page()
@@ -60,7 +60,7 @@ class ProjectsView(Gtk.Box):
     # -- toolbar ----------------------------------------------------------
     def _filter_button(self) -> Gtk.MenuButton:
         menu = Gtk.MenuButton()
-        menu.set_icon_name("view-more-symbolic")
+        menu.set_icon_name("devnet-more-symbolic")
         menu.set_tooltip_text("Filter")
         menu.add_css_class("flat")
         popover = Gtk.Popover()
@@ -139,7 +139,7 @@ class ProjectsView(Gtk.Box):
 
     def _process_menu(self, process: DevProcess) -> Gtk.MenuButton:
         menu = Gtk.MenuButton()
-        menu.set_icon_name("view-more-symbolic")
+        menu.set_icon_name("devnet-more-symbolic")
         menu.add_css_class("flat")
         menu.set_tooltip_text("More actions")
         popover = Gtk.Popover()
@@ -163,17 +163,17 @@ class ProjectsView(Gtk.Box):
             for editor in editors():
                 add(
                     f"Open in {editor.name}",
-                    "system-run-symbolic",
+                    "devnet-terminal-symbolic",
                     lambda e=editor, p=process: open_in(e, p.cwd),
                 )
-            add("Show in Files", "folder-open-symbolic", lambda p=process: open_folder(p.cwd))
+            add("Show in Files", "devnet-folder-symbolic", lambda p=process: open_folder(p.cwd))
             box.append(Gtk.Separator())
-            add("Copy Path", "edit-copy-symbolic", lambda p=process: clipboard_text(p.cwd))
-        add("Copy PID", "edit-copy-symbolic", lambda p=process: clipboard_text(str(p.pid)))
+            add("Copy Path", "devnet-copy-symbolic", lambda p=process: clipboard_text(p.cwd))
+        add("Copy PID", "devnet-copy-symbolic", lambda p=process: clipboard_text(str(p.pid)))
         for port in process.ports:
             add(
                 f"Open localhost:{port}",
-                "web-browser-symbolic",
+                "devnet-dns-symbolic",
                 lambda value=port: open_uri(f"http://localhost:{value}"),
             )
         popover.set_child(box)
@@ -182,7 +182,7 @@ class ProjectsView(Gtk.Box):
 
     def _container_row(self, container: Container) -> Adw.PreferencesRow:
         row = Adw.ActionRow()
-        row.add_prefix(AppIcon(None, "package-x-generic-symbolic", "blue"))
+        row.add_prefix(AppIcon(None, "devnet-package-bold-symbolic", "blue"))
         row.set_title(container.name)
         row.set_subtitle(f"{container.image} — {container.status}")
         suffix = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)

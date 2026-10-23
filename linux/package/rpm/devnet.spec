@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           devnet
-Version:        1.2.0
+Version:        1.3.0
 Release:        1%{?dist}
 Summary:        Split tunneling, DNS switching and local dev servers
 License:        MIT
@@ -14,12 +14,14 @@ Requires:       python3-gobject
 Requires:       python3-cairo
 Requires:       gtk4
 Requires:       libadwaita
+Requires:       librsvg2
 Requires:       iproute
 Requires:       iputils
 Requires:       polkit
 Requires:       desktop-file-utils
 Requires:       hicolor-icon-theme
 Requires:       glib2
+Recommends:     rsms-inter-fonts
 Recommends:     NetworkManager
 Recommends:     systemd-resolved
 Recommends:     iso-codes
@@ -109,5 +111,5 @@ fi
 %{_datadir}/icons/hicolor/*/apps/org.devnet.App.png
 
 %changelog
-* Thu Oct 22 2026 Sajjad Mohabati <sajjadmohabati@users.noreply.github.com> - 1.2.0-1
+* Fri Oct 23 2026 Sajjad Mohabati <sajjadmohabati@users.noreply.github.com> - 1.3.0-1
 - Initial native Linux release.

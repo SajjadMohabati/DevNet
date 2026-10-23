@@ -105,7 +105,7 @@ enum AppInfo {
     static let author = "Sajjad Mohabati"
     static let repo = URL(string: "https://github.com/SajjadMohabati/DevNet")!
     static let profile = URL(string: "https://github.com/SajjadMohabati")!
-    static var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.2.0" }
+    static var version: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.3.0" }
 
     /// True once install.sh has put the DNS helper and sudoers rule in place.
     static var passwordless: Bool {

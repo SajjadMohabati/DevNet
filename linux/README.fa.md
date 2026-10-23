@@ -34,10 +34,10 @@ sudo dnf install python3 python3-gobject python3-cairo gtk4 libadwaita iproute i
 
 ```bash
 # بسته‌ی دبیان
-sudo apt install ./devnet_1.2.0_all.deb
+sudo apt install ./devnet_1.3.0_all.deb
 
 # بسته‌ی RPM
-sudo dnf install ./devnet-1.2.0-1.*.noarch.rpm
+sudo dnf install ./devnet-1.3.0-1.*.noarch.rpm
 
 # از همین مخزن
 sudo ./linux/install.sh
@@ -83,8 +83,8 @@ devnet --version
 ## ساخت بسته‌ها
 
 ```bash
-./linux/package/deb/build.sh    # build/deb/devnet_1.2.0_all.deb
-./linux/package/rpm/build.sh    # build/rpm/devnet-1.2.0-1.*.noarch.rpm
+./linux/package/deb/build.sh    # build/deb/devnet_1.3.0_all.deb
+./linux/package/rpm/build.sh    # build/rpm/devnet-1.3.0-1.*.noarch.rpm
 ```
 
 ## تست‌ها

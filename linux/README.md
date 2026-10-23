@@ -31,11 +31,11 @@ Install the runtime packages manually if needed:
 
 ```bash
 # Debian / Ubuntu
-sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 \
+sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-4.0 gir1.2-adw-1 librsvg2-common \
   iproute2 iputils-ping pkexec desktop-file-utils hicolor-icon-theme
 
 # Fedora / Red Hat
-sudo dnf install python3 python3-gobject python3-cairo gtk4 libadwaita iproute iputils polkit \
+sudo dnf install python3 python3-gobject python3-cairo gtk4 libadwaita librsvg2 iproute iputils polkit \
   desktop-file-utils hicolor-icon-theme
 ```
 
@@ -44,13 +44,13 @@ sudo dnf install python3 python3-gobject python3-cairo gtk4 libadwaita iproute i
 ### Debian package
 
 ```bash
-sudo apt install ./devnet_1.2.0_all.deb
+sudo apt install ./devnet_1.3.0_all.deb
 ```
 
 ### RPM package
 
 ```bash
-sudo dnf install ./devnet-1.2.0-1.*.noarch.rpm
+sudo dnf install ./devnet-1.3.0-1.*.noarch.rpm
 ```
 
 ### From this repository
@@ -151,14 +151,14 @@ Build a `.deb` without debhelper or network access:
 
 ```bash
 ./linux/package/deb/build.sh
-# output: build/deb/devnet_1.2.0_all.deb
+# output: build/deb/devnet_1.3.0_all.deb
 ```
 
 Build an RPM (needs `rpm-build`):
 
 ```bash
 ./linux/package/rpm/build.sh
-# output: build/rpm/devnet-1.2.0-1.*.noarch.rpm
+# output: build/rpm/devnet-1.3.0-1.*.noarch.rpm
 ```
 
 Both scripts read the version from `linux/src/devnet/__init__.py`. Set `VERSION=...` to
